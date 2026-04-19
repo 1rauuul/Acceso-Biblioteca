@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Sexo {
+  M
+  F
+}
+
+enum Carrera {
+  SISTEMAS
+  INDUSTRIAL
+  GESTION
+  CIVIL
+  ELECTRONICA
+  MECATRONICA
+  ADMINISTRACION
+  CONTADURIA
+  BIOQUIMICA
+  BIOMEDICA
+  LOGISTICA
+}
+
+model Student {
+  id              String           @id @default(cuid())
+  numeroControl   String           @unique @map("numero_control")
+  nombre          String
+  apellidoPaterno String           @map("apellido_paterno")
+  apellidoMaterno String           @map("apellido_materno")
+  sexo            Sexo
+  carrera         Carrera
+  semestre        Int
+  deviceId        String?          @map("device_id")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  records         AccessRecord[]
+  surveys         SurveyResponse[]
+
+  @@map("students")
+}
+
+model AccessRecord {
+  id              String          @id @default(cuid())
+  studentId       String          @map("student_id")
+  entryTime       DateTime        @map("entry_time")
+  exitTime        DateTime?       @map("exit_time")
+  durationMinutes Int?            @map("duration_minutes")
+  autoClosed      Boolean         @default(false) @map("auto_closed")
+  localId         String          @unique @map("local_id")
+  syncedAt        DateTime?       @map("synced_at")
+  student         Student         @relation(fields: [studentId], references: [id])
+  survey          SurveyResponse?
+
+  @@index([studentId])
+  @@index([entryTime])
+  @@index([exitTime])
+  @@map("access_records")
+}
+
+model SurveyResponse {
+  id             String       @id @default(cuid())
+  studentId      String       @map("student_id")
+  accessRecordId String       @unique @map("access_record_id")
+  stars          Int
+  limpieza       Int
+  mesas          Int
+  silencio       Int
+  comment        String?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  student        Student      @relation(fields: [studentId], references: [id])
+  accessRecord   AccessRecord @relation(fields: [accessRecordId], references: [id])
+
+  @@map("survey_responses")
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("admin_users")
+}
