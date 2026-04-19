@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { getStudent, getCurrentSession, syncWithServer } from "@/lib/idb";
 
 export default function Home() {
   const router = useRouter();
-  const [, setReady] = useState(false);
 
   useEffect(() => {
     async function route() {
@@ -25,14 +24,12 @@ export default function Home() {
           router.replace("/entrada");
         }
 
-        // Try to sync in the background
         if (navigator.onLine) {
           syncWithServer().catch(() => {});
         }
       } catch {
         router.replace("/registro");
       }
-      setReady(true);
     }
     route();
   }, [router]);
