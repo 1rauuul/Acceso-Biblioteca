@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { mxDayBounds, mxHour } from "@/lib/datetime";
 
 export async function GET() {
   const session = await getSession();
@@ -8,9 +9,7 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+  const { start: todayStart, end: todayEnd } = mxDayBounds();
 
   // Students currently inside (have entry today, no exit)
   const currentlyInside = await prisma.accessRecord.count({
@@ -54,8 +53,7 @@ export async function GET() {
 
   const hourlyData = Array.from({ length: 24 }, (_, hour) => ({
     hour: `${String(hour).padStart(2, "0")}:00`,
-    entradas: hourlyRecords.filter((r) => r.entryTime.getHours() === hour)
-      .length,
+    entradas: hourlyRecords.filter((r) => mxHour(r.entryTime) === hour).length,
   })).filter((h) => h.hour >= "06:00" && h.hour <= "21:00");
 
   // Peak hour

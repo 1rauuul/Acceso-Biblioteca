@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Carrera } from "@/lib/generated/prisma/enums";
+import { mxWallTimeToUtc } from "@/lib/datetime";
+
+// Parse "YYYY-MM-DD" as the start (00:00) of that Mexico-local day.
+// Returns the equivalent UTC Date.
+function parseMxDateStart(input: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
+  if (!match) return null;
+  const [, y, m, d] = match;
+  return mxWallTimeToUtc(Number(y), Number(m) - 1, Number(d), 0, 0, 0);
+}
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -22,11 +32,19 @@ export async function GET(request: NextRequest) {
 
   if (from || to) {
     where.entryTime = {};
-    if (from)
-      (where.entryTime as Record<string, unknown>).gte = new Date(from);
+    if (from) {
+      const fromDate = parseMxDateStart(from) ?? new Date(from);
+      (where.entryTime as Record<string, unknown>).gte = fromDate;
+    }
     if (to) {
-      const toDate = new Date(to);
-      toDate.setDate(toDate.getDate() + 1);
+      const toStart = parseMxDateStart(to);
+      const toDate = toStart
+        ? new Date(toStart.getTime() + 24 * 60 * 60 * 1000)
+        : (() => {
+            const d = new Date(to);
+            d.setDate(d.getDate() + 1);
+            return d;
+          })();
       (where.entryTime as Record<string, unknown>).lt = toDate;
     }
   }

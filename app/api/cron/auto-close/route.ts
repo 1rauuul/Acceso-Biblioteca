@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { LIBRARY_CLOSE_HOUR } from "@/lib/constants";
+import { mxDayBounds, mxWallTimeToUtc } from "@/lib/datetime";
 
 async function handler(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -11,14 +12,14 @@ async function handler(request: NextRequest) {
   }
 
   const now = new Date();
-  const todayClose = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    LIBRARY_CLOSE_HOUR,
-    0,
-    0
-  );
+  // Compute today's closing time at LIBRARY_CLOSE_HOUR Mexico-local, then
+  // materialize it as a UTC Date so date comparisons work regardless of the
+  // server's own timezone (Vercel runs in UTC).
+  const { start: mxDayStart } = mxDayBounds(now);
+  const mxY = mxDayStart.getUTCFullYear();
+  const mxM = mxDayStart.getUTCMonth();
+  const mxD = mxDayStart.getUTCDate();
+  const todayClose = mxWallTimeToUtc(mxY, mxM, mxD, LIBRARY_CLOSE_HOUR, 0, 0);
 
   // Find all open sessions where entry was before closing time
   const openSessions = await prisma.accessRecord.findMany({

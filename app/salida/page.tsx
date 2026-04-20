@@ -28,6 +28,7 @@ function useElapsedTime(entryIso: string | null) {
       entryDate.toLocaleTimeString("es-MX", {
         hour: "2-digit",
         minute: "2-digit",
+        timeZone: "America/Mexico_City",
       })
     );
 

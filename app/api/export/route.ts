@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Carrera } from "@/lib/generated/prisma/enums";
+import { formatMxDateTime, mxWallTimeToUtc } from "@/lib/datetime";
 import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -24,11 +25,22 @@ export async function GET(request: NextRequest) {
 
   if (from || to) {
     where.entryTime = {};
-    if (from)
-      (where.entryTime as Record<string, unknown>).gte = new Date(from);
+    if (from) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(from);
+      const fromDate = m
+        ? mxWallTimeToUtc(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0)
+        : new Date(from);
+      (where.entryTime as Record<string, unknown>).gte = fromDate;
+    }
     if (to) {
-      const toDate = new Date(to);
-      toDate.setDate(toDate.getDate() + 1);
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(to);
+      const toStart = m
+        ? mxWallTimeToUtc(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0)
+        : (() => {
+            const d = new Date(to);
+            return d;
+          })();
+      const toDate = new Date(toStart.getTime() + 24 * 60 * 60 * 1000);
       (where.entryTime as Record<string, unknown>).lt = toDate;
     }
   }
@@ -60,8 +72,8 @@ export async function GET(request: NextRequest) {
     noControl: r.student.numeroControl,
     carrera: r.student.carrera,
     semestre: r.student.semestre,
-    entrada: r.entryTime.toLocaleString("es-MX"),
-    salida: r.exitTime?.toLocaleString("es-MX") ?? "Sin salida",
+    entrada: formatMxDateTime(r.entryTime),
+    salida: r.exitTime ? formatMxDateTime(r.exitTime) : "Sin salida",
     duracion:
       r.durationMinutes !== null
         ? `${Math.floor(r.durationMinutes / 60)}h ${r.durationMinutes % 60}min`
@@ -112,7 +124,7 @@ export async function GET(request: NextRequest) {
   doc.text("Biblioteca Escuela - Reporte de Registros", 14, 15);
   doc.setFontSize(10);
   doc.text(
-    `Generado: ${new Date().toLocaleString("es-MX")}`,
+    `Generado: ${formatMxDateTime(new Date())}`,
     14,
     22
   );

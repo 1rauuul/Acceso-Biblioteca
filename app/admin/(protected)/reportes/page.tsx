@@ -54,6 +54,7 @@ function formatDate(iso: string) {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    timeZone: "America/Mexico_City",
   });
 }
 
@@ -61,6 +62,7 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("es-MX", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "America/Mexico_City",
   });
 }
 
