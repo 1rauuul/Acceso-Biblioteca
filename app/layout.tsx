@@ -30,6 +30,9 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: APP_NAME,
   },
+  icons: {
+    apple: "/icons/icon-192x192.png",
+  },
   formatDetection: { telephone: false },
 };
 
