@@ -27,6 +27,7 @@ interface RecordRow {
   numeroControl: string;
   carrera: string;
   semestre: number;
+  sexo: "M" | "F";
   entryTime: string;
   exitTime: string | null;
   durationMinutes: number | null;
@@ -43,6 +44,11 @@ interface ReportData {
     avgDuration: number;
     careerDistribution: {
       carrera: string;
+      visitas: number;
+      porcentaje: number;
+    }[];
+    sexDistribution: {
+      sexo: string;
       visitas: number;
       porcentaje: number;
     }[];
@@ -81,6 +87,7 @@ export default function ReportesPage() {
     to: "",
     carrera: "",
     semestre: "",
+    sexo: "",
   });
   const [page, setPage] = useState(1);
 
@@ -91,6 +98,7 @@ export default function ReportesPage() {
     if (filters.to) params.set("to", filters.to);
     if (filters.carrera) params.set("carrera", filters.carrera);
     if (filters.semestre) params.set("semestre", filters.semestre);
+    if (filters.sexo) params.set("sexo", filters.sexo);
     params.set("page", String(page));
 
     try {
@@ -112,6 +120,7 @@ export default function ReportesPage() {
     if (filters.to) params.set("to", filters.to);
     if (filters.carrera) params.set("carrera", filters.carrera);
     if (filters.semestre) params.set("semestre", filters.semestre);
+    if (filters.sexo) params.set("sexo", filters.sexo);
     params.set("format", format);
     window.open(`/api/export?${params}`, "_blank");
   };
@@ -119,7 +128,7 @@ export default function ReportesPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Filters */}
-      <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-8">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="from" className="text-xs">
             Desde
@@ -144,7 +153,7 @@ export default function ReportesPage() {
             onChange={(e) => setFilters((p) => ({ ...p, to: e.target.value }))}
           />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5 lg:col-span-3">
           <Label className="text-xs">Carrera</Label>
           <Select
             value={filters.carrera}
@@ -186,6 +195,24 @@ export default function ReportesPage() {
             </SelectContent>
           </Select>
         </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs">Sexo</Label>
+          <Select
+            value={filters.sexo}
+            onValueChange={(v) =>
+              setFilters((p) => ({ ...p, sexo: v === "ALL" ? "" : v }))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todos</SelectItem>
+              <SelectItem value="M">Masculino</SelectItem>
+              <SelectItem value="F">Femenino</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex items-end gap-2">
           <button
             onClick={() => {
@@ -202,7 +229,7 @@ export default function ReportesPage() {
 
       {/* Metrics summary */}
       {data?.metrics && (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-lg border border-border bg-card px-4 py-3">
             <p className="text-xs text-muted-foreground">Total visitas</p>
             <p className="text-2xl font-bold">{data.metrics.totalVisits}</p>
@@ -224,6 +251,20 @@ export default function ReportesPage() {
               </span>
             </p>
           </div>
+          {data.metrics.sexDistribution.map((s) => (
+            <div
+              key={s.sexo}
+              className="rounded-lg border border-border bg-card px-4 py-3"
+            >
+              <p className="text-xs text-muted-foreground">{s.sexo}</p>
+              <p className="text-2xl font-bold">
+                {s.visitas}{" "}
+                <span className="text-sm font-normal text-muted-foreground">
+                  {s.porcentaje}%
+                </span>
+              </p>
+            </div>
+          ))}
         </div>
       )}
 
@@ -253,6 +294,7 @@ export default function ReportesPage() {
               <TableHead>Estudiante</TableHead>
               <TableHead>No. Control</TableHead>
               <TableHead className="hidden md:table-cell">Carrera</TableHead>
+              <TableHead className="hidden lg:table-cell">Sexo</TableHead>
               <TableHead>Entrada</TableHead>
               <TableHead>Salida</TableHead>
               <TableHead className="hidden sm:table-cell">Duración</TableHead>
@@ -261,14 +303,14 @@ export default function ReportesPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center">
+                <TableCell colSpan={7} className="h-32 text-center">
                   <div className="mx-auto size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 </TableCell>
               </TableRow>
             ) : data?.records.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="h-32 text-center text-muted-foreground"
                 >
                   No se encontraron registros
@@ -285,6 +327,9 @@ export default function ReportesPage() {
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
                     {r.carrera}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell">
+                    {r.sexo === "M" ? "Masculino" : "Femenino"}
                   </TableCell>
                   <TableCell className="tabular-nums">
                     {formatDate(r.entryTime)} {formatTime(r.entryTime)}

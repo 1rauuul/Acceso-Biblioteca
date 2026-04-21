@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { Carrera } from "@/lib/generated/prisma/enums";
+import type { Carrera, Sexo } from "@/lib/generated/prisma/enums";
 import { mxWallTimeToUtc } from "@/lib/datetime";
 
 // Parse "YYYY-MM-DD" as the start (00:00) of that Mexico-local day.
@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
   const to = searchParams.get("to");
   const carrera = searchParams.get("carrera");
   const semestre = searchParams.get("semestre");
+  const sexo = searchParams.get("sexo");
   const page = parseInt(searchParams.get("page") || "1");
   const limit = parseInt(searchParams.get("limit") || "20");
 
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest) {
 
   if (carrera) studentWhere.carrera = carrera as Carrera;
   if (semestre) studentWhere.semestre = parseInt(semestre);
+  if (sexo === "M" || sexo === "F") studentWhere.sexo = sexo as Sexo;
   if (Object.keys(studentWhere).length > 0) {
     where.student = studentWhere;
   }
@@ -66,6 +68,7 @@ export async function GET(request: NextRequest) {
             numeroControl: true,
             carrera: true,
             semestre: true,
+            sexo: true,
           },
         },
       },
@@ -82,7 +85,7 @@ export async function GET(request: NextRequest) {
     select: {
       durationMinutes: true,
       entryTime: true,
-      student: { select: { carrera: true } },
+      student: { select: { carrera: true, sexo: true } },
     },
   });
 
@@ -96,9 +99,11 @@ export async function GET(request: NextRequest) {
       : 0;
 
   const careerCounts: Record<string, number> = {};
+  const sexCounts = { M: 0, F: 0 };
   for (const r of allForMetrics) {
     const c = r.student.carrera;
     careerCounts[c] = (careerCounts[c] || 0) + 1;
+    sexCounts[r.student.sexo]++;
   }
   const totalCareer = Object.values(careerCounts).reduce((s, v) => s + v, 0);
   const careerDistribution = Object.entries(careerCounts)
@@ -109,6 +114,20 @@ export async function GET(request: NextRequest) {
     }))
     .sort((a, b) => b.visitas - a.visitas);
 
+  const totalSex = sexCounts.M + sexCounts.F;
+  const sexDistribution = [
+    {
+      sexo: "Masculino",
+      visitas: sexCounts.M,
+      porcentaje: totalSex > 0 ? Math.round((sexCounts.M / totalSex) * 100) : 0,
+    },
+    {
+      sexo: "Femenino",
+      visitas: sexCounts.F,
+      porcentaje: totalSex > 0 ? Math.round((sexCounts.F / totalSex) * 100) : 0,
+    },
+  ];
+
   return NextResponse.json({
     records: records.map((r) => ({
       id: r.id,
@@ -116,6 +135,7 @@ export async function GET(request: NextRequest) {
       numeroControl: r.student.numeroControl,
       carrera: r.student.carrera,
       semestre: r.student.semestre,
+      sexo: r.student.sexo,
       entryTime: r.entryTime.toISOString(),
       exitTime: r.exitTime?.toISOString() ?? null,
       durationMinutes: r.durationMinutes,
@@ -128,6 +148,7 @@ export async function GET(request: NextRequest) {
       totalVisits: total,
       avgDuration,
       careerDistribution,
+      sexDistribution,
     },
   });
 }

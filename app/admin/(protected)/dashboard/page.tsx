@@ -7,6 +7,10 @@ import {
   Bar,
   LineChart,
   Line,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -24,6 +28,11 @@ interface DashboardData {
   hourlyData: { hour: string; entradas: number }[];
   careerDistribution: {
     carrera: string;
+    visitas: number;
+    porcentaje: number;
+  }[];
+  sexDistribution: {
+    sexo: string;
     visitas: number;
     porcentaje: number;
   }[];
@@ -111,23 +120,43 @@ export default function DashboardPage() {
             Distribución horaria
           </h2>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={data.hourlyData}>
+            <LineChart
+              data={data.hourlyData}
+              margin={{ top: 10, right: 16, bottom: 8, left: 16 }}
+            >
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis
                 dataKey="hour"
-                className="text-xs"
-                tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                interval={0}
+                tickFormatter={(h: string) => {
+                  const num = parseInt(h);
+                  if (num === 12) return "12pm";
+                  return num < 12 ? `${num}am` : `${num - 12}pm`;
+                }}
+                tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
+                tickLine={false}
+                label={{
+                  value: "Hora del día",
+                  position: "insideBottom",
+                  offset: -4,
+                  style: { fill: "var(--muted-foreground)", fontSize: 11 },
+                }}
+                height={48}
               />
-              <YAxis
-                className="text-xs"
-                tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
-              />
+              <YAxis hide />
               <Tooltip
                 contentStyle={{
                   backgroundColor: "var(--card)",
                   border: "1px solid var(--border)",
                   borderRadius: "8px",
                   fontSize: "13px",
+                }}
+                formatter={(value) => [value, "Entradas"]}
+                labelFormatter={(h) => {
+                  const num = parseInt(String(h));
+                  if (isNaN(num)) return String(h);
+                  if (num === 12) return "12:00 pm";
+                  return num < 12 ? `${num}:00 am` : `${num - 12}:00 pm`;
                 }}
               />
               <Line
@@ -181,6 +210,70 @@ export default function DashboardPage() {
             </p>
           )}
         </div>
+      </div>
+
+      {/* Sex distribution */}
+      <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <h2 className="mb-4 text-sm font-semibold text-foreground">
+          Distribución por sexo
+        </h2>
+        {data.sexDistribution.some((s) => s.visitas > 0) ? (
+          <div className="flex flex-col items-center sm:flex-row sm:items-center sm:justify-around gap-4">
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={data.sexDistribution}
+                  dataKey="visitas"
+                  nameKey="sexo"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={90}
+                  paddingAngle={3}
+                >
+                  <Cell fill="var(--primary)" />
+                  <Cell fill="hsl(280 65% 60%)" />
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "var(--card)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    fontSize: "13px",
+                  }}
+                  formatter={(value, name, props) => [
+                    `${value} visitas (${props.payload.porcentaje}%)`,
+                    props.payload.sexo,
+                  ]}
+                />
+                <Legend
+                  formatter={(value) => (
+                    <span style={{ fontSize: 13, color: "var(--foreground)" }}>
+                      {value}
+                    </span>
+                  )}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="flex gap-6 sm:flex-col sm:gap-3">
+              {data.sexDistribution.map((s) => (
+                <div key={s.sexo} className="text-center">
+                  <p className="text-2xl font-bold text-foreground">
+                    {s.visitas}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{s.sexo}</p>
+                  <p className="text-xs font-medium text-foreground">
+                    {s.porcentaje}%
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
+            Sin datos disponibles
+          </p>
+        )}
       </div>
 
       <p className="text-center text-xs text-muted-foreground">

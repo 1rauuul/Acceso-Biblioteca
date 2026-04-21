@@ -54,7 +54,7 @@ export async function GET() {
   const hourlyData = Array.from({ length: 24 }, (_, hour) => ({
     hour: `${String(hour).padStart(2, "0")}:00`,
     entradas: hourlyRecords.filter((r) => mxHour(r.entryTime) === hour).length,
-  })).filter((h) => h.hour >= "06:00" && h.hour <= "21:00");
+  })).filter((h) => h.hour >= "07:00" && h.hour <= "18:00");
 
   // Peak hour
   const peakHourEntry = hourlyData.reduce(
@@ -83,6 +83,30 @@ export async function GET() {
     }))
     .sort((a, b) => b.visitas - a.visitas);
 
+  // Usage by sex
+  const sexData = await prisma.accessRecord.findMany({
+    where: { entryTime: { gte: todayStart, lt: todayEnd } },
+    select: { student: { select: { sexo: true } } },
+  });
+
+  const sexCounts = { M: 0, F: 0 };
+  for (const r of sexData) {
+    sexCounts[r.student.sexo]++;
+  }
+  const totalSex = sexCounts.M + sexCounts.F;
+  const sexDistribution = [
+    {
+      sexo: "Masculino",
+      visitas: sexCounts.M,
+      porcentaje: totalSex > 0 ? Math.round((sexCounts.M / totalSex) * 100) : 0,
+    },
+    {
+      sexo: "Femenino",
+      visitas: sexCounts.F,
+      porcentaje: totalSex > 0 ? Math.round((sexCounts.F / totalSex) * 100) : 0,
+    },
+  ];
+
   return NextResponse.json({
     currentlyInside,
     totalVisitsToday,
@@ -91,5 +115,6 @@ export async function GET() {
     peakHourCount: peakHourEntry.entradas,
     hourlyData,
     careerDistribution,
+    sexDistribution,
   });
 }
