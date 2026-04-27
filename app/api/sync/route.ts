@@ -2,184 +2,248 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { Carrera, Sexo } from "@/lib/generated/prisma/enums";
 
-interface SyncPayload {
-  student?: {
-    id: string;
-    numeroControl: string;
-    nombre: string;
-    apellidoPaterno: string;
-    apellidoMaterno: string;
-    sexo: Sexo;
-    carrera: string;
-    semestre: number;
-    deviceId: string;
-  } | null;
-  studentNumeroControl?: string | null;
-  records?: {
-    localId: string;
-    studentId: string;
-    entryTime: string;
-    exitTime: string | null;
-  }[];
-  surveys?: {
-    localId: string;
-    accessRecordLocalId: string;
-    studentId: string;
-    stars: number;
-    limpieza: number;
-    mesas: number;
-    silencio: number;
-    comment: string;
-    createdAt: string;
-  }[];
-  source?: string;
+type Platform = "ios" | "android" | "desktop" | "unknown";
+
+interface DevicePayload {
+  id: string;
+  platform?: Platform;
+  userAgent?: string;
 }
+
+interface StudentPayload {
+  numeroControl: string;
+  nombre: string;
+  apellidoPaterno: string;
+  apellidoMaterno: string;
+  sexo: Sexo;
+  carrera: string;
+  semestre: number;
+  currentDeviceId: string;
+}
+
+interface RecordPayload {
+  id: string;
+  numeroControl: string;
+  entryTime: string;
+  exitTime: string | null;
+  clientRecordedAt: string;
+  sourceDeviceId: string;
+}
+
+interface SurveyPayload {
+  id: string;
+  numeroControl: string;
+  accessRecordId: string;
+  stars: number;
+  limpieza: number;
+  mesas: number;
+  silencio: number;
+  comment: string;
+  sourceDeviceId: string;
+  clientRecordedAt: string;
+}
+
+interface SyncPayload {
+  student?: StudentPayload | null;
+  device?: DevicePayload;
+  records?: RecordPayload[];
+  surveys?: SurveyPayload[];
+  // UUIDs of sessions the client wants the server's current state for
+  // (typically sessions still open locally, so the client can detect
+  // cron-driven auto-closes and reconcile its IndexedDB).
+  openRecordIds?: string[];
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (v: string | undefined | null): v is string =>
+  !!v && UUID_RE.test(v);
 
 export async function POST(request: NextRequest) {
   try {
     const body: SyncPayload = await request.json();
-    let studentSynced = false;
     const syncedRecordIds: string[] = [];
     const syncedSurveyIds: string[] = [];
-    let serverStudentId: string | null = null;
+    let studentSynced = false;
 
-    // Sync student
+    // 1) Device upsert (every sync refreshes last_seen_at).
+    if (body.device && isUuid(body.device.id)) {
+      await prisma.$executeRaw`
+        INSERT INTO "devices" ("id", "platform", "user_agent", "first_seen_at", "last_seen_at")
+        VALUES (
+          ${body.device.id}::uuid,
+          COALESCE(${body.device.platform ?? null}::"DevicePlatform", 'unknown'::"DevicePlatform"),
+          ${body.device.userAgent ?? null},
+          now(),
+          now()
+        )
+        ON CONFLICT ("id") DO UPDATE SET
+          "last_seen_at" = now(),
+          "user_agent"   = COALESCE(EXCLUDED."user_agent", "devices"."user_agent"),
+          "platform"     = CASE
+                             WHEN "devices"."platform" = 'unknown' THEN EXCLUDED."platform"
+                             ELSE "devices"."platform"
+                           END
+      `;
+    }
+
+    // 2) Student upsert keyed by numero_control. No client_recorded_at guard
+    //    here: student data is master-data that only changes at registration.
     if (body.student) {
-      const existing = await prisma.student.findUnique({
+      const deviceId = isUuid(body.student.currentDeviceId)
+        ? body.student.currentDeviceId
+        : null;
+      await prisma.student.upsert({
         where: { numeroControl: body.student.numeroControl },
+        create: {
+          numeroControl: body.student.numeroControl,
+          nombre: body.student.nombre,
+          apellidoPaterno: body.student.apellidoPaterno,
+          apellidoMaterno: body.student.apellidoMaterno,
+          sexo: body.student.sexo,
+          carrera: body.student.carrera as Carrera,
+          semestre: body.student.semestre,
+          currentDeviceId: deviceId,
+        },
+        update: {
+          nombre: body.student.nombre,
+          apellidoPaterno: body.student.apellidoPaterno,
+          apellidoMaterno: body.student.apellidoMaterno,
+          sexo: body.student.sexo,
+          carrera: body.student.carrera as Carrera,
+          semestre: body.student.semestre,
+          currentDeviceId: deviceId,
+        },
       });
-
-      if (existing) {
-        serverStudentId = existing.id;
-        await prisma.student.update({
-          where: { id: existing.id },
-          data: { deviceId: body.student.deviceId },
-        });
-      } else {
-        const created = await prisma.student.create({
-          data: {
-            numeroControl: body.student.numeroControl,
-            nombre: body.student.nombre,
-            apellidoPaterno: body.student.apellidoPaterno,
-            apellidoMaterno: body.student.apellidoMaterno,
-            sexo: body.student.sexo,
-            carrera: body.student.carrera as Carrera,
-            semestre: body.student.semestre,
-            deviceId: body.student.deviceId,
-          },
-        });
-        serverStudentId = created.id;
-      }
       studentSynced = true;
     }
 
-    // Resolve server student id via numeroControl when the student record
-    // itself is not in the payload (already synced on a previous request).
-    if (!serverStudentId && body.studentNumeroControl) {
-      const owner = await prisma.student.findUnique({
-        where: { numeroControl: body.studentNumeroControl },
-        select: { id: true },
-      });
-      if (owner) serverStudentId = owner.id;
-    }
-
-    // If we still cannot identify the student but there are records/surveys
-    // to sync, bail out: the client will retry after the student is synced.
-    if (
-      !serverStudentId &&
-      ((body.records?.length ?? 0) > 0 || (body.surveys?.length ?? 0) > 0)
-    ) {
-      return NextResponse.json({
-        studentSynced,
-        syncedRecordIds,
-        syncedSurveyIds,
-        message: "Student must sync first",
-      });
-    }
-
-    // Sync records
-    if (body.records?.length && serverStudentId) {
+    // 3) Access records: idempotent upsert guarded by client_recorded_at.
+    //    Clients may have sent older offline data after a newer sync already
+    //    landed (e.g. from a different device), so we never overwrite newer
+    //    timestamps. `duration_minutes` is a GENERATED column and must not
+    //    appear in INSERT/UPDATE.
+    if (body.records?.length) {
       for (const record of body.records) {
-        const existing = await prisma.accessRecord.findUnique({
-          where: { localId: record.localId },
-        });
-
-        if (existing) {
-          if (record.exitTime && !existing.exitTime) {
-            const exitTime = new Date(record.exitTime);
-            const duration = Math.floor(
-              (exitTime.getTime() - existing.entryTime.getTime()) / 60000
-            );
-            await prisma.accessRecord.update({
-              where: { id: existing.id },
-              data: {
-                exitTime,
-                durationMinutes: duration,
-                syncedAt: new Date(),
-              },
-            });
-          }
-        } else {
-          const entryTime = new Date(record.entryTime);
-          const exitTime = record.exitTime
-            ? new Date(record.exitTime)
-            : null;
-          const duration =
-            exitTime
-              ? Math.floor(
-                  (exitTime.getTime() - entryTime.getTime()) / 60000
-                )
-              : null;
-
-          await prisma.accessRecord.create({
-            data: {
-              studentId: serverStudentId,
-              localId: record.localId,
-              entryTime,
-              exitTime,
-              durationMinutes: duration,
-              syncedAt: new Date(),
-            },
-          });
+        if (!isUuid(record.id) || !isUuid(record.sourceDeviceId)) continue;
+        try {
+          await prisma.$executeRaw`
+            INSERT INTO "access_records" (
+              "id",
+              "numero_control",
+              "entry_time",
+              "exit_time",
+              "auto_closed",
+              "source_device_id",
+              "client_recorded_at",
+              "synced_at"
+            )
+            VALUES (
+              ${record.id}::uuid,
+              ${record.numeroControl},
+              ${new Date(record.entryTime)},
+              ${record.exitTime ? new Date(record.exitTime) : null},
+              false,
+              ${record.sourceDeviceId}::uuid,
+              ${new Date(record.clientRecordedAt)},
+              now()
+            )
+            ON CONFLICT ("id") DO UPDATE SET
+              "exit_time"          = EXCLUDED."exit_time",
+              "client_recorded_at" = EXCLUDED."client_recorded_at",
+              "synced_at"          = now()
+            WHERE EXCLUDED."client_recorded_at" >= "access_records"."client_recorded_at"
+          `;
+          syncedRecordIds.push(record.id);
+        } catch (err) {
+          console.error("[api/sync] record upsert failed", record.id, err);
         }
-        syncedRecordIds.push(record.localId);
       }
     }
 
-    // Sync surveys
-    if (body.surveys?.length && serverStudentId) {
+    // 4) Surveys: idempotent upsert. The (access_record_id) uniqueness is the
+    //    real conflict target; `id` uniqueness lets the same client retry.
+    if (body.surveys?.length) {
       for (const survey of body.surveys) {
-        const accessRecord = await prisma.accessRecord.findUnique({
-          where: { localId: survey.accessRecordLocalId },
-        });
-
-        if (!accessRecord) continue;
-
-        const existingSurvey = await prisma.surveyResponse.findUnique({
-          where: { accessRecordId: accessRecord.id },
-        });
-
-        if (!existingSurvey) {
-          await prisma.surveyResponse.create({
-            data: {
-              studentId: serverStudentId,
-              accessRecordId: accessRecord.id,
-              stars: survey.stars,
-              limpieza: survey.limpieza,
-              mesas: survey.mesas,
-              silencio: survey.silencio,
-              comment: survey.comment || null,
-            },
-          });
+        if (
+          !isUuid(survey.id) ||
+          !isUuid(survey.accessRecordId) ||
+          !isUuid(survey.sourceDeviceId)
+        ) {
+          continue;
         }
-        syncedSurveyIds.push(survey.localId);
+        try {
+          await prisma.$executeRaw`
+            INSERT INTO "survey_responses" (
+              "id",
+              "numero_control",
+              "access_record_id",
+              "stars",
+              "limpieza",
+              "mesas",
+              "silencio",
+              "comment",
+              "source_device_id",
+              "client_recorded_at",
+              "synced_at",
+              "created_at"
+            )
+            VALUES (
+              ${survey.id}::uuid,
+              ${survey.numeroControl},
+              ${survey.accessRecordId}::uuid,
+              ${survey.stars}::smallint,
+              ${survey.limpieza}::smallint,
+              ${survey.mesas}::smallint,
+              ${survey.silencio}::smallint,
+              ${survey.comment?.trim() || null},
+              ${survey.sourceDeviceId}::uuid,
+              ${new Date(survey.clientRecordedAt)},
+              now(),
+              ${new Date(survey.clientRecordedAt)}
+            )
+            ON CONFLICT ("access_record_id") DO NOTHING
+          `;
+          syncedSurveyIds.push(survey.id);
+        } catch (err) {
+          console.error("[api/sync] survey upsert failed", survey.id, err);
+        }
       }
+    }
+
+    // 5) Reverse sync: return the authoritative server state for every UUID
+    //    the client asked about (its open sessions) plus everything it just
+    //    pushed. This lets the PWA detect sessions auto-closed by the cron.
+    const queryIds = Array.from(
+      new Set<string>([
+        ...(body.openRecordIds ?? []),
+        ...(body.records?.map((r) => r.id) ?? []),
+      ])
+    ).filter(isUuid);
+
+    let serverRecords: {
+      id: string;
+      exitTime: string | null;
+      autoClosed: boolean;
+    }[] = [];
+
+    if (queryIds.length > 0) {
+      const rows = await prisma.accessRecord.findMany({
+        where: { id: { in: queryIds } },
+        select: { id: true, exitTime: true, autoClosed: true },
+      });
+      serverRecords = rows.map((r) => ({
+        id: r.id,
+        exitTime: r.exitTime ? r.exitTime.toISOString() : null,
+        autoClosed: r.autoClosed,
+      }));
     }
 
     return NextResponse.json({
       studentSynced,
       syncedRecordIds,
       syncedSurveyIds,
+      serverRecords,
     });
   } catch (error) {
     console.error("[api/sync] FAILED:", error);

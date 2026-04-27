@@ -15,6 +15,7 @@ import {
   syncWithServer,
 } from "@/lib/idb";
 import { LIBRARY_CLOSE_HOUR } from "@/lib/constants";
+import { mxHour } from "@/lib/datetime";
 
 function useElapsedTime(entryIso: string | null) {
   const [elapsed, setElapsed] = useState("");
@@ -54,21 +55,56 @@ export default function SalidaPage() {
   const { elapsed, entryDisplay } = useElapsedTime(entryTime);
 
   useEffect(() => {
-    async function init() {
+    let cancelled = false;
+
+    // Reconcile the local session against the server (and the wall clock)
+    // so we detect cron-driven auto-closes and push the PWA off this page
+    // once the library has closed.
+    async function reconcile(): Promise<boolean> {
       const student = await getStudent();
       if (!student) {
-        router.replace("/registro");
-        return;
+        if (!cancelled) router.replace("/registro");
+        return true;
+      }
+
+      // If it's past closing hour, try to pull the server's state first
+      // (the cron may have already closed this session at 18:05 MX).
+      const pastClose = mxHour(new Date()) >= LIBRARY_CLOSE_HOUR;
+      if (pastClose && navigator.onLine) {
+        try {
+          await syncWithServer();
+        } catch {
+          // Offline or server error: fall through to the local fallback.
+        }
       }
 
       const session = await getCurrentSession();
       if (!session) {
-        router.replace("/entrada");
-        return;
+        if (!cancelled) router.replace("/entrada");
+        return true;
       }
-      setEntryTime(session.entryTime);
+
+      // Local fallback: if we are past closing hour and the session is
+      // still open locally (cron didn't run, device was offline, etc.),
+      // close it locally so the UI stops claiming the student is inside.
+      if (pastClose) {
+        await createExit();
+        if (!cancelled) router.replace("/entrada");
+        return true;
+      }
+
+      if (!cancelled) setEntryTime(session.entryTime);
+      return false;
     }
-    init();
+
+    reconcile();
+    const interval = setInterval(() => {
+      reconcile();
+    }, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [router]);
 
   const handleSalir = useCallback(async () => {

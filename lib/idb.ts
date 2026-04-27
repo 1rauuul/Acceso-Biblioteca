@@ -1,7 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
 export interface StudentData {
-  id: string;
   numeroControl: string;
   nombre: string;
   apellidoPaterno: string;
@@ -9,28 +8,32 @@ export interface StudentData {
   sexo: "M" | "F";
   carrera: string;
   semestre: number;
-  deviceId: string;
+  currentDeviceId: string;
   synced: boolean;
 }
 
 export interface AccessRecordLocal {
-  localId: string;
-  studentId: string;
-  entryTime: string; // ISO string
-  exitTime: string | null;
+  id: string; // UUID, client-generated. Primary key server-side too.
+  numeroControl: string; // FK to students.numero_control
+  entryTime: string; // ISO
+  exitTime: string | null; // ISO
+  clientRecordedAt: string; // ISO — when the entry/exit actually happened
+  sourceDeviceId: string; // UUID of the device that created the row
   synced: boolean;
 }
 
 export interface SurveyLocal {
-  localId: string;
-  accessRecordLocalId: string;
-  studentId: string;
+  id: string; // UUID, client-generated
+  numeroControl: string;
+  accessRecordId: string; // UUID pointing at the closed AccessRecord
   stars: number;
   limpieza: number;
   mesas: number;
   silencio: number;
   comment: string;
-  createdAt: string;
+  sourceDeviceId: string;
+  clientRecordedAt: string; // ISO — when the user submitted the survey
+  createdAt: string; // ISO — same as clientRecordedAt; retained for UX
   synced: boolean;
 }
 
@@ -61,7 +64,39 @@ interface LibraryDB extends DBSchema {
 }
 
 const DB_NAME = "biblioteca-escuela";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
+
+const DEVICE_ID_KEY = "biblioteca-device-id";
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string | undefined | null): value is string {
+  return typeof value === "string" && UUID_RE.test(value);
+}
+
+function newUuid(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  // Fallback for very old browsers: RFC4122 v4 via getRandomValues.
+  const bytes = new Uint8Array(16);
+  (globalThis.crypto ?? (globalThis as unknown as { msCrypto: Crypto }).msCrypto).getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex
+    .slice(6, 8)
+    .join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
+}
+
+function getOrCreateDeviceId(): string {
+  if (typeof localStorage === "undefined") return newUuid();
+  const stored = localStorage.getItem(DEVICE_ID_KEY);
+  if (stored && isUuid(stored)) return stored;
+  const id = newUuid();
+  localStorage.setItem(DEVICE_ID_KEY, id);
+  return id;
+}
 
 let dbPromise: Promise<IDBPDatabase<LibraryDB>> | null = null;
 
@@ -71,37 +106,154 @@ function getDB() {
   }
   if (!dbPromise) {
     dbPromise = openDB<LibraryDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        db.createObjectStore("student", { keyPath: "id" });
+      async upgrade(db, oldVersion, _newVersion, tx) {
+        if (oldVersion < 1) {
+          db.createObjectStore("student", { keyPath: "numeroControl" });
+          const recordStore = db.createObjectStore("records", { keyPath: "id" });
+          recordStore.createIndex("by-synced", "synced");
+          recordStore.createIndex("by-student", "numeroControl");
+          const surveyStore = db.createObjectStore("surveys", { keyPath: "id" });
+          surveyStore.createIndex("by-synced", "synced");
+          db.createObjectStore("config", { keyPath: "key" });
+          return;
+        }
 
-        const recordStore = db.createObjectStore("records", {
-          keyPath: "localId",
-        });
-        recordStore.createIndex("by-synced", "synced");
-        recordStore.createIndex("by-student", "studentId");
+        // v1 → v2: keyPaths changed (`student.id` → `student.numeroControl`,
+        // `records.localId` → `records.id`, `surveys.localId` → `surveys.id`)
+        // and the shape of each row was extended with offline-first fields.
+        if (oldVersion < 2) {
+          const legacyStudents = (await tx
+            .objectStore("student")
+            .getAll()) as unknown as Array<{
+            id?: string;
+            numeroControl: string;
+            nombre: string;
+            apellidoPaterno: string;
+            apellidoMaterno: string;
+            sexo: "M" | "F";
+            carrera: string;
+            semestre: number;
+            deviceId?: string;
+            synced?: boolean;
+          }>;
+          const legacyRecords = (await tx
+            .objectStore("records")
+            .getAll()) as unknown as Array<{
+            localId: string;
+            studentId: string;
+            entryTime: string;
+            exitTime: string | null;
+            synced?: boolean;
+          }>;
+          const legacySurveys = (await tx
+            .objectStore("surveys")
+            .getAll()) as unknown as Array<{
+            localId: string;
+            accessRecordLocalId: string;
+            studentId: string;
+            stars: number;
+            limpieza: number;
+            mesas: number;
+            silencio: number;
+            comment: string;
+            createdAt: string;
+            synced?: boolean;
+          }>;
 
-        const surveyStore = db.createObjectStore("surveys", {
-          keyPath: "localId",
-        });
-        surveyStore.createIndex("by-synced", "synced");
+          db.deleteObjectStore("student");
+          db.deleteObjectStore("records");
+          db.deleteObjectStore("surveys");
 
-        db.createObjectStore("config", { keyPath: "key" });
+          db.createObjectStore("student", { keyPath: "numeroControl" });
+          const recordStore = db.createObjectStore("records", { keyPath: "id" });
+          recordStore.createIndex("by-synced", "synced");
+          recordStore.createIndex("by-student", "numeroControl");
+          const surveyStore = db.createObjectStore("surveys", { keyPath: "id" });
+          surveyStore.createIndex("by-synced", "synced");
+
+          const deviceId =
+            (typeof localStorage !== "undefined" &&
+              localStorage.getItem(DEVICE_ID_KEY)) ||
+            newUuid();
+          if (typeof localStorage !== "undefined") {
+            localStorage.setItem(DEVICE_ID_KEY, deviceId);
+          }
+
+          const sStore = tx.objectStore("student");
+          for (const s of legacyStudents) {
+            await sStore.put({
+              numeroControl: s.numeroControl,
+              nombre: s.nombre,
+              apellidoPaterno: s.apellidoPaterno,
+              apellidoMaterno: s.apellidoMaterno,
+              sexo: s.sexo,
+              carrera: s.carrera,
+              semestre: s.semestre,
+              currentDeviceId: isUuid(s.deviceId) ? s.deviceId! : deviceId,
+              synced: s.synced ?? false,
+            });
+          }
+
+          // All historical local rows belong to the single locally registered
+          // student: resolve numero_control from the first (and only) student.
+          const localNumeroControl = legacyStudents[0]?.numeroControl ?? "";
+
+          const rStore = tx.objectStore("records");
+          for (const r of legacyRecords) {
+            const id = isUuid(r.localId) ? r.localId : newUuid();
+            await rStore.put({
+              id,
+              numeroControl: localNumeroControl,
+              entryTime: r.entryTime,
+              exitTime: r.exitTime,
+              clientRecordedAt: r.entryTime,
+              sourceDeviceId: deviceId,
+              synced: r.synced ?? false,
+            });
+          }
+
+          const surveyStore2 = tx.objectStore("surveys");
+          for (const s of legacySurveys) {
+            const id = isUuid(s.localId) ? s.localId : newUuid();
+            if (!isUuid(s.accessRecordLocalId)) {
+              // Without a resolvable UUID for the access_record we cannot
+              // upload this survey; mark it synced to stop retries.
+              await surveyStore2.put({
+                id,
+                numeroControl: localNumeroControl,
+                accessRecordId: "00000000-0000-0000-0000-000000000000",
+                stars: s.stars,
+                limpieza: s.limpieza,
+                mesas: s.mesas,
+                silencio: s.silencio,
+                comment: s.comment,
+                sourceDeviceId: deviceId,
+                clientRecordedAt: s.createdAt,
+                createdAt: s.createdAt,
+                synced: true,
+              });
+              continue;
+            }
+            await surveyStore2.put({
+              id,
+              numeroControl: localNumeroControl,
+              accessRecordId: s.accessRecordLocalId,
+              stars: s.stars,
+              limpieza: s.limpieza,
+              mesas: s.mesas,
+              silencio: s.silencio,
+              comment: s.comment,
+              sourceDeviceId: deviceId,
+              clientRecordedAt: s.createdAt,
+              createdAt: s.createdAt,
+              synced: s.synced ?? false,
+            });
+          }
+        }
       },
     });
   }
   return dbPromise;
-}
-
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-}
-
-function generateDeviceId(): string {
-  const stored = localStorage.getItem("biblioteca-device-id");
-  if (stored) return stored;
-  const id = crypto.randomUUID();
-  localStorage.setItem("biblioteca-device-id", id);
-  return id;
 }
 
 // ── Student ──
@@ -113,22 +265,21 @@ export async function getStudent(): Promise<StudentData | undefined> {
 }
 
 export async function saveStudent(
-  data: Omit<StudentData, "id" | "deviceId" | "synced">
+  data: Omit<StudentData, "currentDeviceId" | "synced">
 ): Promise<StudentData> {
   const db = await getDB();
   const student: StudentData = {
     ...data,
-    id: generateId(),
-    deviceId: generateDeviceId(),
+    currentDeviceId: getOrCreateDeviceId(),
     synced: false,
   };
   await db.put("student", student);
   return student;
 }
 
-export async function markStudentSynced(id: string) {
+export async function markStudentSynced(numeroControl: string) {
   const db = await getDB();
-  const student = await db.get("student", id);
+  const student = await db.get("student", numeroControl);
   if (student) {
     student.synced = true;
     await db.put("student", student);
@@ -150,11 +301,14 @@ export async function createEntry(): Promise<AccessRecordLocal> {
   const student = await getStudent();
   if (!student) throw new Error("No student registered");
 
+  const now = new Date().toISOString();
   const record: AccessRecordLocal = {
-    localId: generateId(),
-    studentId: student.id,
-    entryTime: new Date().toISOString(),
+    id: newUuid(),
+    numeroControl: student.numeroControl,
+    entryTime: now,
     exitTime: null,
+    clientRecordedAt: now,
+    sourceDeviceId: getOrCreateDeviceId(),
     synced: false,
   };
   await db.put("records", record);
@@ -167,7 +321,10 @@ export async function createExit(): Promise<AccessRecordLocal | undefined> {
   const session = await getCurrentSession();
   if (!session) return undefined;
 
-  session.exitTime = new Date().toISOString();
+  const now = new Date().toISOString();
+  session.exitTime = now;
+  // The most recent client-side mutation wins on the server's conflict guard.
+  session.clientRecordedAt = now;
   session.synced = false;
   await db.put("records", session);
   requestBackgroundSync();
@@ -198,9 +355,9 @@ export async function getPendingRecords(): Promise<AccessRecordLocal[]> {
   return all.filter((r) => !r.synced);
 }
 
-export async function markRecordSynced(localId: string) {
+export async function markRecordSynced(id: string) {
   const db = await getDB();
-  const record = await db.get("records", localId);
+  const record = await db.get("records", id);
   if (record) {
     record.synced = true;
     await db.put("records", record);
@@ -210,17 +367,27 @@ export async function markRecordSynced(localId: string) {
 // ── Surveys ──
 
 export async function saveSurvey(
-  data: Omit<SurveyLocal, "localId" | "createdAt" | "synced">
+  data: Omit<
+    SurveyLocal,
+    | "id"
+    | "createdAt"
+    | "synced"
+    | "sourceDeviceId"
+    | "clientRecordedAt"
+  >
 ): Promise<SurveyLocal> {
   const db = await getDB();
+  const now = new Date().toISOString();
   const survey: SurveyLocal = {
     ...data,
-    localId: generateId(),
-    createdAt: new Date().toISOString(),
+    id: newUuid(),
+    sourceDeviceId: getOrCreateDeviceId(),
+    clientRecordedAt: now,
+    createdAt: now,
     synced: false,
   };
   await db.put("surveys", survey);
-  await setConfig("lastSurveyDate", new Date().toISOString());
+  await setConfig("lastSurveyDate", now);
   requestBackgroundSync();
   return survey;
 }
@@ -232,9 +399,9 @@ export async function getPendingSurveys(): Promise<SurveyLocal[]> {
   return all.filter((s) => !s.synced);
 }
 
-export async function markSurveySynced(localId: string) {
+export async function markSurveySynced(id: string) {
   const db = await getDB();
-  const survey = await db.get("surveys", localId);
+  const survey = await db.get("surveys", id);
   if (survey) {
     survey.synced = true;
     await db.put("surveys", survey);
@@ -277,10 +444,35 @@ export async function getAllSyncData() {
   return { student, pendingRecords, pendingSurveys };
 }
 
+async function getOpenRecordIds(): Promise<string[]> {
+  const db = await getDB();
+  const all = await db.getAll("records");
+  return all.filter((r) => r.exitTime === null).map((r) => r.id);
+}
+
+async function applyServerExitTime(
+  id: string,
+  exitTimeIso: string
+): Promise<void> {
+  const db = await getDB();
+  const record = await db.get("records", id);
+  if (!record) return;
+  if (record.exitTime) return;
+  record.exitTime = exitTimeIso;
+  record.synced = true;
+  await db.put("records", record);
+}
+
 function requestBackgroundSync() {
   if ("serviceWorker" in navigator && "SyncManager" in window) {
     navigator.serviceWorker.ready
-      .then((reg) => (reg as unknown as { sync: { register: (tag: string) => Promise<void> } }).sync.register("sync-records"))
+      .then((reg) =>
+        (
+          reg as unknown as {
+            sync: { register: (tag: string) => Promise<void> };
+          }
+        ).sync.register("sync-records")
+      )
       .catch(() => {});
   }
 }
@@ -288,25 +480,38 @@ function requestBackgroundSync() {
 export async function syncWithServer(): Promise<{
   syncedRecords: number;
   syncedSurveys: number;
+  serverClosedRecords: number;
 }> {
   const { student, pendingRecords, pendingSurveys } = await getAllSyncData();
+  const openRecordIds = await getOpenRecordIds();
 
+  // Skip the network round-trip only if there is literally nothing to push
+  // AND nothing to reconcile (no open sessions to check against the server).
   if (
     (!student || student.synced) &&
     pendingRecords.length === 0 &&
-    pendingSurveys.length === 0
+    pendingSurveys.length === 0 &&
+    openRecordIds.length === 0
   ) {
-    return { syncedRecords: 0, syncedSurveys: 0 };
+    return { syncedRecords: 0, syncedSurveys: 0, serverClosedRecords: 0 };
   }
+
+  const deviceId = getOrCreateDeviceId();
 
   const res = await fetch("/api/sync", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       student: student && !student.synced ? student : null,
-      studentNumeroControl: student?.numeroControl ?? null,
+      device: {
+        id: deviceId,
+        platform: detectPlatform(),
+        userAgent:
+          typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+      },
       records: pendingRecords,
       surveys: pendingSurveys,
+      openRecordIds,
     }),
   });
 
@@ -317,17 +522,43 @@ export async function syncWithServer(): Promise<{
   const result = await res.json();
 
   if (student && !student.synced && result.studentSynced) {
-    await markStudentSynced(student.id);
+    await markStudentSynced(student.numeroControl);
   }
-  for (const localId of result.syncedRecordIds ?? []) {
-    await markRecordSynced(localId);
+  for (const id of result.syncedRecordIds ?? []) {
+    await markRecordSynced(id);
   }
-  for (const localId of result.syncedSurveyIds ?? []) {
-    await markSurveySynced(localId);
+  for (const id of result.syncedSurveyIds ?? []) {
+    await markSurveySynced(id);
+  }
+
+  // Reverse-sync: apply server-side closures (typically from the auto-close
+  // cron) to our local IndexedDB so the PWA stops saying "Dentro desde…"
+  // after the library closes.
+  let serverClosedRecords = 0;
+  const serverRecords: {
+    id: string;
+    exitTime: string | null;
+    autoClosed: boolean;
+  }[] = result.serverRecords ?? [];
+  for (const sr of serverRecords) {
+    if (sr.exitTime) {
+      await applyServerExitTime(sr.id, sr.exitTime);
+      serverClosedRecords++;
+    }
   }
 
   return {
     syncedRecords: result.syncedRecordIds?.length ?? 0,
     syncedSurveys: result.syncedSurveyIds?.length ?? 0,
+    serverClosedRecords,
   };
+}
+
+function detectPlatform(): "ios" | "android" | "desktop" | "unknown" {
+  if (typeof navigator === "undefined") return "unknown";
+  const ua = navigator.userAgent.toLowerCase();
+  if (/iphone|ipad|ipod/.test(ua)) return "ios";
+  if (/android/.test(ua)) return "android";
+  if (/mac|win|linux/.test(ua)) return "desktop";
+  return "unknown";
 }

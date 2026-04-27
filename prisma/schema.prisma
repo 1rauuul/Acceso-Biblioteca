@@ -26,63 +26,104 @@ enum Carrera {
   LOGISTICA
 }
 
+enum DevicePlatform {
+  ios
+  android
+  desktop
+  unknown
+}
+
 model Student {
-  id              String           @id @default(cuid())
-  numeroControl   String           @unique @map("numero_control")
+  numeroControl   String           @id @map("numero_control")
   nombre          String
   apellidoPaterno String           @map("apellido_paterno")
   apellidoMaterno String           @map("apellido_materno")
   sexo            Sexo
   carrera         Carrera
-  semestre        Int
-  deviceId        String?          @map("device_id")
-  createdAt       DateTime         @default(now()) @map("created_at")
+  semestre        Int              @db.SmallInt
+  currentDeviceId String?          @map("current_device_id") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+  currentDevice   Device?          @relation(fields: [currentDeviceId], references: [id], onDelete: SetNull)
   records         AccessRecord[]
   surveys         SurveyResponse[]
 
   @@map("students")
 }
 
-model AccessRecord {
-  id              String          @id @default(cuid())
-  studentId       String          @map("student_id")
-  entryTime       DateTime        @map("entry_time")
-  exitTime        DateTime?       @map("exit_time")
-  durationMinutes Int?            @map("duration_minutes")
-  autoClosed      Boolean         @default(false) @map("auto_closed")
-  localId         String          @unique @map("local_id")
-  syncedAt        DateTime?       @map("synced_at")
-  student         Student         @relation(fields: [studentId], references: [id])
-  survey          SurveyResponse?
+model Device {
+  id           String           @id @db.Uuid
+  platform     DevicePlatform   @default(unknown)
+  userAgent    String?          @map("user_agent")
+  firstSeenAt  DateTime         @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+  lastSeenAt   DateTime         @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @default(now()) @map("updated_at") @db.Timestamptz(6)
+  students     Student[]
+  records      AccessRecord[]
+  surveys      SurveyResponse[]
 
-  @@index([studentId])
+  @@index([lastSeenAt(sort: Desc)])
+  @@map("devices")
+}
+
+/// `duration_minutes` is a STORED GENERATED column in the database.
+/// Do NOT write to it from Prisma; it is computed server-side from
+/// (exit_time - entry_time). See migration_d for the GENERATED clause.
+model AccessRecord {
+  id               String          @id @db.Uuid
+  numeroControl    String          @map("numero_control")
+  entryTime        DateTime        @map("entry_time") @db.Timestamptz(6)
+  exitTime         DateTime?       @map("exit_time") @db.Timestamptz(6)
+  durationMinutes  Int?            @map("duration_minutes")
+  autoClosed       Boolean         @default(false) @map("auto_closed")
+  sourceDeviceId   String          @map("source_device_id") @db.Uuid
+  clientRecordedAt DateTime        @map("client_recorded_at") @db.Timestamptz(6)
+  syncedAt         DateTime        @default(now()) @map("synced_at") @db.Timestamptz(6)
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime        @default(now()) @map("updated_at") @db.Timestamptz(6)
+  student          Student         @relation(fields: [numeroControl], references: [numeroControl], onUpdate: Cascade, onDelete: Restrict)
+  sourceDevice     Device          @relation(fields: [sourceDeviceId], references: [id], onDelete: Restrict)
+  survey           SurveyResponse?
+
+  @@index([numeroControl, entryTime(sort: Desc)])
   @@index([entryTime])
   @@index([exitTime])
+  @@index([updatedAt])
+  @@index([sourceDeviceId])
   @@map("access_records")
 }
 
 model SurveyResponse {
-  id             String       @id @default(cuid())
-  studentId      String       @map("student_id")
-  accessRecordId String       @unique @map("access_record_id")
-  stars          Int
-  limpieza       Int
-  mesas          Int
-  silencio       Int
-  comment        String?
-  createdAt      DateTime     @default(now()) @map("created_at")
-  student        Student      @relation(fields: [studentId], references: [id])
-  accessRecord   AccessRecord @relation(fields: [accessRecordId], references: [id])
+  id               String       @id @db.Uuid
+  numeroControl    String       @map("numero_control")
+  accessRecordId   String       @unique @map("access_record_id") @db.Uuid
+  stars            Int          @db.SmallInt
+  limpieza         Int          @db.SmallInt
+  mesas            Int          @db.SmallInt
+  silencio         Int          @db.SmallInt
+  comment          String?
+  sourceDeviceId   String       @map("source_device_id") @db.Uuid
+  clientRecordedAt DateTime     @map("client_recorded_at") @db.Timestamptz(6)
+  syncedAt         DateTime     @default(now()) @map("synced_at") @db.Timestamptz(6)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime     @default(now()) @map("updated_at") @db.Timestamptz(6)
+  student          Student      @relation(fields: [numeroControl], references: [numeroControl], onUpdate: Cascade, onDelete: Restrict)
+  accessRecord     AccessRecord @relation(fields: [accessRecordId], references: [id], onDelete: Restrict)
+  sourceDevice     Device       @relation(fields: [sourceDeviceId], references: [id], onDelete: Restrict)
 
+  @@index([numeroControl, createdAt(sort: Desc)])
+  @@index([updatedAt])
   @@map("survey_responses")
 }
 
 model AdminUser {
-  id           String   @id @default(cuid())
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email        String   @unique
   passwordHash String   @map("password_hash")
   name         String
-  createdAt    DateTime @default(now()) @map("created_at")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   @@map("admin_users")
 }

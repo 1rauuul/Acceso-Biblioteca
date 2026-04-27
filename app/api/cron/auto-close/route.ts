@@ -8,6 +8,9 @@ async function handler(request: NextRequest) {
   const expected = `Bearer ${process.env.CRON_SECRET}`;
 
   if (authHeader !== expected) {
+    console.warn(
+      "[cron/auto-close] Unauthorized call (authorization header mismatch)"
+    );
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -16,77 +19,60 @@ async function handler(request: NextRequest) {
   // materialize it as a UTC Date so date comparisons work regardless of the
   // server's own timezone (Vercel runs in UTC).
   const { start: mxDayStart } = mxDayBounds(now);
-  const mxY = mxDayStart.getUTCFullYear();
-  const mxM = mxDayStart.getUTCMonth();
-  const mxD = mxDayStart.getUTCDate();
-  const todayClose = mxWallTimeToUtc(mxY, mxM, mxD, LIBRARY_CLOSE_HOUR, 0, 0);
+  const todayClose = mxWallTimeToUtc(
+    mxDayStart.getUTCFullYear(),
+    mxDayStart.getUTCMonth(),
+    mxDayStart.getUTCDate(),
+    LIBRARY_CLOSE_HOUR,
+    0,
+    0
+  );
 
-  // Find all open sessions where entry was before closing time
-  const openSessions = await prisma.accessRecord.findMany({
-    where: {
-      exitTime: null,
-      entryTime: { lt: todayClose },
-    },
-    include: {
-      student: {
-        include: {
-          records: {
-            where: {
-              durationMinutes: { not: null },
-              autoClosed: false,
-            },
-            select: { durationMinutes: true },
-            orderBy: { entryTime: "desc" },
-            take: 20,
-          },
-        },
-      },
-    },
+  console.log("[cron/auto-close] start", {
+    now: now.toISOString(),
+    todayClose: todayClose.toISOString(),
   });
 
-  let closedCount = 0;
+  // Single UPDATE that closes every open session with the smaller of
+  //   (entry_time + per-student average duration) vs today's closing time,
+  //   but never before entry_time.
+  // Average is computed over the student's last 20 non-auto-closed visits;
+  // if there's no history we fall back to 120 minutes.
+  // `duration_minutes` is a GENERATED STORED column and is recomputed
+  // automatically when `exit_time` is written.
+  const closedCount = await prisma.$executeRaw`
+    UPDATE "access_records" ar
+    SET
+      "exit_time"   = LEAST(
+        GREATEST(
+          ar."entry_time",
+          ar."entry_time" + COALESCE((
+            SELECT ROUND(AVG(h."duration_minutes"))::int
+            FROM (
+              SELECT "duration_minutes"
+              FROM "access_records"
+              WHERE "numero_control" = ar."numero_control"
+                AND "duration_minutes" IS NOT NULL
+                AND "auto_closed" = false
+              ORDER BY "entry_time" DESC
+              LIMIT 20
+            ) h
+          ), 120) * INTERVAL '1 minute'
+        ),
+        ${todayClose}::timestamptz
+      ),
+      "auto_closed" = true
+    WHERE ar."exit_time" IS NULL
+  `;
 
-  for (const session of openSessions) {
-    const history = session.student.records;
-    let estimatedDuration: number;
-
-    if (history.length > 0) {
-      // Use average of last 20 completed visits
-      estimatedDuration = Math.round(
-        history.reduce((sum, r) => sum + (r.durationMinutes ?? 0), 0) /
-          history.length
-      );
-    } else {
-      // Default: 2 hours
-      estimatedDuration = 120;
-    }
-
-    const estimatedExit = new Date(
-      session.entryTime.getTime() + estimatedDuration * 60000
-    );
-
-    // Cap at closing time
-    const exitTime = estimatedExit > todayClose ? todayClose : estimatedExit;
-
-    const duration = Math.floor(
-      (exitTime.getTime() - session.entryTime.getTime()) / 60000
-    );
-
-    await prisma.accessRecord.update({
-      where: { id: session.id },
-      data: {
-        exitTime,
-        durationMinutes: duration,
-        autoClosed: true,
-      },
-    });
-
-    closedCount++;
-  }
+  console.log("[cron/auto-close] done", {
+    closedSessions: closedCount,
+    timestamp: now.toISOString(),
+  });
 
   return NextResponse.json({
     success: true,
-    closedSessions: closedCount,
+    closedSessions: Number(closedCount),
     timestamp: now.toISOString(),
   });
 }
@@ -94,4 +80,3 @@ async function handler(request: NextRequest) {
 // Vercel Cron invokes this endpoint via GET; we also accept POST for manual/testing use.
 export const GET = handler;
 export const POST = handler;
-

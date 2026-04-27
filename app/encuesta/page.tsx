@@ -26,7 +26,7 @@ export default function EncuestaPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [lastRecordId, setLastRecordId] = useState<string | null>(null);
-  const [studentId, setStudentId] = useState<string | null>(null);
+  const [numeroControl, setNumeroControl] = useState<string | null>(null);
   const [error, setError] = useState<string>("");
 
   useEffect(() => {
@@ -36,11 +36,11 @@ export default function EncuestaPage() {
         router.replace("/registro");
         return;
       }
-      setStudentId(student.id);
+      setNumeroControl(student.numeroControl);
 
       const lastClosed = await getLastClosedRecord();
       if (lastClosed) {
-        setLastRecordId(lastClosed.localId);
+        setLastRecordId(lastClosed.id);
       }
     }
     init();
@@ -49,7 +49,7 @@ export default function EncuestaPage() {
   const handleSubmit = async () => {
     setError("");
 
-    if (!studentId || !lastRecordId) {
+    if (!numeroControl || !lastRecordId) {
       setError(
         "No encontramos tu visita más reciente. Intenta regresar e ingresar de nuevo."
       );
@@ -60,8 +60,8 @@ export default function EncuestaPage() {
 
     try {
       await saveSurvey({
-        studentId,
-        accessRecordLocalId: lastRecordId,
+        numeroControl,
+        accessRecordId: lastRecordId,
         stars: stars || 3,
         limpieza,
         mesas,
