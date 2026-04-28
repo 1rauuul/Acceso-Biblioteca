@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Lock, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -97,6 +98,13 @@ export default function AdminLoginPage() {
               "Iniciar sesión"
             )}
           </button>
+
+          <Link
+            href="/registro"
+            className="text-center text-sm text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+          >
+            Volver a registro
+          </Link>
         </form>
       </div>
     </PageWrapper>

@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FileBarChart,
   LogOut,
+  ArrowLeft,
   BookOpen,
   Menu,
   X,
@@ -101,6 +102,13 @@ export function AdminShell({ children, userName }: AdminShellProps) {
           <div className="mb-2 px-3 text-xs text-muted-foreground">
             {userName}
           </div>
+          <Link
+            href="/registro"
+            className="mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+            Volver a registro
+          </Link>
           <button
             onClick={handleLogout}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"

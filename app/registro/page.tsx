@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Loader2 } from "lucide-react";
+import { UserPlus, Loader2, Shield } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -98,6 +98,18 @@ export default function RegistroPage() {
 
   return (
     <PageWrapper className="bg-gradient-to-b from-blue-50 to-indigo-100 dark:from-slate-900 dark:to-slate-800">
+      <div className="px-6 pt-4">
+        <div className="flex justify-end">
+          <button
+            type="button"
+            aria-label="Acceso administrador"
+            onClick={() => router.push("/admin/login")}
+            className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-border/70 bg-background/80 p-2 text-muted-foreground shadow-sm transition-colors hover:bg-background hover:text-foreground focus-visible:ring-4 focus-visible:ring-primary/40 focus-visible:outline-none"
+          >
+            <Shield className="size-5" strokeWidth={1.7} />
+          </button>
+        </div>
+      </div>
       <LibraryHeader subtitle="Registro de estudiante" />
 
       <form
