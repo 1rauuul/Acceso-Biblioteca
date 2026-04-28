@@ -58,6 +58,9 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (v: string | undefined | null): v is string =>
   !!v && UUID_RE.test(v);
+const CONTROL_NUMBER_RE = /^\d{8}$/;
+const isControlNumber = (v: string | undefined | null): v is string =>
+  !!v && CONTROL_NUMBER_RE.test(v);
 
 export async function POST(request: NextRequest) {
   try {
@@ -89,7 +92,7 @@ export async function POST(request: NextRequest) {
 
     // 2) Student upsert keyed by numero_control. No client_recorded_at guard
     //    here: student data is master-data that only changes at registration.
-    if (body.student) {
+    if (body.student && isControlNumber(body.student.numeroControl)) {
       const deviceId = isUuid(body.student.currentDeviceId)
         ? body.student.currentDeviceId
         : null;
@@ -116,6 +119,8 @@ export async function POST(request: NextRequest) {
         },
       });
       studentSynced = true;
+    } else if (body.student) {
+      console.warn("[api/sync] invalid student numeroControl, skipped");
     }
 
     // 3) Access records: idempotent upsert guarded by client_recorded_at.
@@ -125,7 +130,13 @@ export async function POST(request: NextRequest) {
     //    appear in INSERT/UPDATE.
     if (body.records?.length) {
       for (const record of body.records) {
-        if (!isUuid(record.id) || !isUuid(record.sourceDeviceId)) continue;
+        if (
+          !isUuid(record.id) ||
+          !isUuid(record.sourceDeviceId) ||
+          !isControlNumber(record.numeroControl)
+        ) {
+          continue;
+        }
         try {
           await prisma.$executeRaw`
             INSERT INTO "access_records" (
@@ -168,7 +179,8 @@ export async function POST(request: NextRequest) {
         if (
           !isUuid(survey.id) ||
           !isUuid(survey.accessRecordId) ||
-          !isUuid(survey.sourceDeviceId)
+          !isUuid(survey.sourceDeviceId) ||
+          !isControlNumber(survey.numeroControl)
         ) {
           continue;
         }

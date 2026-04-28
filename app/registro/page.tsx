@@ -31,8 +31,8 @@ function validate(form: Record<string, string>): FormErrors {
   const errors: FormErrors = {};
   if (!form.numeroControl?.trim()) {
     errors.numeroControl = "El número de control es obligatorio";
-  } else if (!/^\d{8,10}$/.test(form.numeroControl.trim())) {
-    errors.numeroControl = "Debe tener entre 8 y 10 dígitos";
+  } else if (!/^\d{8}$/.test(form.numeroControl.trim())) {
+    errors.numeroControl = "Debe tener exactamente 8 dígitos numéricos";
   }
   if (!form.nombre?.trim()) errors.nombre = "El nombre es obligatorio";
   if (!form.apellidoPaterno?.trim())
@@ -122,9 +122,15 @@ export default function RegistroPage() {
           <Input
             id="numeroControl"
             inputMode="numeric"
-            placeholder="Ej: 20210001"
+            placeholder="Ej: 22360962"
             value={form.numeroControl}
-            onChange={(e) => updateField("numeroControl", e.target.value)}
+            maxLength={8}
+            onChange={(e) =>
+              updateField(
+                "numeroControl",
+                e.target.value.replace(/\D/g, "").slice(0, 8)
+              )
+            }
             aria-invalid={!!errors.numeroControl}
           />
         </FieldGroup>
