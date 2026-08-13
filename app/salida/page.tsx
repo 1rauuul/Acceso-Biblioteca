@@ -15,7 +15,7 @@ import {
   syncWithServer,
 } from "@/lib/idb";
 import { LIBRARY_CLOSE_HOUR } from "@/lib/constants";
-import { mxHour } from "@/lib/datetime";
+import { mxHour, mxTodayCloseUtc } from "@/lib/datetime";
 
 function useElapsedTime(entryIso: string | null) {
   const [elapsed, setElapsed] = useState("");
@@ -87,8 +87,14 @@ export default function SalidaPage() {
       // Local fallback: if we are past closing hour and the session is
       // still open locally (cron didn't run, device was offline, etc.),
       // close it locally so the UI stops claiming the student is inside.
+      // We seal `exitTime` with the library's closing time, not "now", so
+      // the local row matches the value the server-side cron will (or did)
+      // use. This keeps local and server consistent even when the device
+      // eventually comes online and the server's auto-close decision
+      // supersedes the client's `createExit()` push.
       if (pastClose) {
-        await createExit();
+        const closeIso = mxTodayCloseUtc(new Date(), LIBRARY_CLOSE_HOUR).toISOString();
+        await createExit({ exitTime: closeIso });
         if (!cancelled) router.replace("/entrada");
         return true;
       }

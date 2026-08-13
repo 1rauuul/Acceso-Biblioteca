@@ -1,10 +1,40 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "dev-secret-change-in-production"
-);
 const COOKIE_NAME = "admin-token";
+
+function resolveJwtSecret(): Uint8Array {
+  const fromEnv = process.env.JWT_SECRET;
+  if (fromEnv && fromEnv.length >= 16) {
+    return new TextEncoder().encode(fromEnv);
+  }
+
+  const isProd = process.env.NODE_ENV === "production";
+  if (isProd) {
+    throw new Error(
+      "JWT_SECRET is required in production. Set it to a random string of at " +
+        "least 16 characters. Refusing to start with a missing or too-short " +
+        "secret because anyone with the source code could forge admin sessions."
+    );
+  }
+
+  // Development-only fallback. Loud, single-shot warning to make the risk
+  // obvious if someone copies dev defaults into a real deploy.
+  if (!globalThis.__jwtSecretWarned) {
+    globalThis.__jwtSecretWarned = true;
+    console.warn(
+      "[auth] JWT_SECRET is not set; using an insecure development-only " +
+        "fallback. Do NOT deploy to production without setting JWT_SECRET."
+    );
+  }
+  return new TextEncoder().encode("dev-secret-change-in-production");
+}
+
+declare global {
+  var __jwtSecretWarned: boolean | undefined;
+}
+
+const JWT_SECRET = resolveJwtSecret();
 
 export async function signToken(payload: {
   sub: string;

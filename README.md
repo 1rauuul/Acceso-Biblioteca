@@ -27,15 +27,23 @@ cp .env.example .env
 
 # 3. Aplicar migraciones y crear el admin inicial
 npx prisma migrate deploy
-npx prisma db seed   # crea admin@biblioteca.edu / admin123
 
-# 4. Levantar dev server
+# 4. Crear el admin inicial con credenciales propias (no hay defaults)
+SEED_ADMIN_EMAIL=tu-admin@biblioteca.edu \
+SEED_ADMIN_PASSWORD="$(openssl rand -base64 24)" \
+SEED_ADMIN_NAME="Tu Nombre" \
+  npx prisma db seed
+
+# 5. Levantar dev server
 npm run dev
 ```
 
 Abre [http://localhost:3000](http://localhost:3000).
 
-> **Importante:** cambia la contraseña del admin (`/admin/cuenta`) antes de exponer la app.
+> **Importante:** el seed **no crea** un usuario admin por defecto. Sin
+> `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` (mín. 8 caracteres), el panel
+> queda inaccesible. En producción, omitir esas variables provoca un fallo
+> explícito del seed en vez de un alta silenciosa.
 
 ---
 
@@ -47,8 +55,11 @@ Ver [`.env.example`](./.env.example). Resumen:
 |---|---|
 | `DATABASE_URL` | Conexión Postgres con pooling (puerto 6543, runtime). |
 | `DIRECT_URL` | Conexión directa (puerto 5432, migraciones). |
-| `JWT_SECRET` | Firma del token de sesión admin. |
+| `JWT_SECRET` | Firma del token de sesión admin (obligatorio en producción). |
 | `CRON_SECRET` | Autoriza al cron de Vercel (`Bearer`). |
+| `SEED_ADMIN_EMAIL` | Email del admin inicial que crea `prisma db seed`. |
+| `SEED_ADMIN_PASSWORD` | Contraseña del admin inicial (mín. 8 caracteres). |
+| `SEED_ADMIN_NAME` | Nombre a mostrar del admin (opcional, default "Administrador"). |
 | `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase (opcional hoy). |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Clave pública Supabase (opcional hoy). |
 

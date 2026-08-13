@@ -316,13 +316,18 @@ export async function createEntry(): Promise<AccessRecordLocal> {
   return record;
 }
 
-export async function createExit(): Promise<AccessRecordLocal | undefined> {
+export async function createExit(
+  options: { exitTime?: string } = {}
+): Promise<AccessRecordLocal | undefined> {
   const db = await getDB();
   const session = await getCurrentSession();
   if (!session) return undefined;
 
   const now = new Date().toISOString();
-  session.exitTime = now;
+  // Allow callers to seal the session with an explicit time (e.g. the
+  // library's closing time when we're past close and the cron never ran).
+  // Falls back to "now" for the normal manual check-out path.
+  session.exitTime = options.exitTime ?? now;
   // The most recent client-side mutation wins on the server's conflict guard.
   session.clientRecordedAt = now;
   session.synced = false;

@@ -14,11 +14,18 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = request.nextUrl;
-  const format = searchParams.get("format") || "xlsx";
+  const formatRaw = searchParams.get("format") || "xlsx";
+  // Whitelist the export format. Anything else falls back to xlsx so a
+  // crafted query string can't be used to probe or surprise the renderer.
+  const format = formatRaw === "pdf" ? "pdf" : "xlsx";
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const carrera = searchParams.get("carrera");
   const semestre = searchParams.get("semestre");
+  // `semestre` arrives as a query string; reject anything non-numeric so we
+  // don't push garbage into Prisma filters.
+  const semestreNum =
+    semestre && /^\d{1,2}$/.test(semestre) ? parseInt(semestre, 10) : null;
 
   const where: Record<string, unknown> = {};
   const studentWhere: Record<string, unknown> = {};
@@ -27,26 +34,37 @@ export async function GET(request: NextRequest) {
     where.entryTime = {};
     if (from) {
       const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(from);
-      const fromDate = m
-        ? mxWallTimeToUtc(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0)
-        : new Date(from);
-      (where.entryTime as Record<string, unknown>).gte = fromDate;
+      if (m) {
+        const fromDate = mxWallTimeToUtc(
+          Number(m[1]),
+          Number(m[2]) - 1,
+          Number(m[3]),
+          0,
+          0,
+          0
+        );
+        (where.entryTime as Record<string, unknown>).gte = fromDate;
+      }
     }
     if (to) {
       const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(to);
-      const toStart = m
-        ? mxWallTimeToUtc(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0)
-        : (() => {
-            const d = new Date(to);
-            return d;
-          })();
-      const toDate = new Date(toStart.getTime() + 24 * 60 * 60 * 1000);
-      (where.entryTime as Record<string, unknown>).lt = toDate;
+      if (m) {
+        const toStart = mxWallTimeToUtc(
+          Number(m[1]),
+          Number(m[2]) - 1,
+          Number(m[3]),
+          0,
+          0,
+          0
+        );
+        const toDate = new Date(toStart.getTime() + 24 * 60 * 60 * 1000);
+        (where.entryTime as Record<string, unknown>).lt = toDate;
+      }
     }
   }
 
   if (carrera) studentWhere.carrera = carrera as Carrera;
-  if (semestre) studentWhere.semestre = parseInt(semestre);
+  if (semestreNum !== null) studentWhere.semestre = semestreNum;
   if (Object.keys(studentWhere).length > 0) where.student = studentWhere;
 
   const records = await prisma.accessRecord.findMany({

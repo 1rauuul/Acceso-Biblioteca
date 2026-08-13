@@ -90,35 +90,71 @@ export async function POST(request: NextRequest) {
       `;
     }
 
-    // 2) Student upsert keyed by numero_control. No client_recorded_at guard
-    //    here: student data is master-data that only changes at registration.
+    // 2) Student sync, keyed by numero_control.
+    //
+    // Two rules enforced server-side:
+    //   a) Master data (nombre, apellidos, sexo, carrera, semestre) is
+    //      immutable from the client. It is only written the FIRST time the
+    //      student is registered. After that, an anonymous client must never
+    //      be able to rewrite another student's profile.
+    //   b) The only field that may be updated is `currentDeviceId`, and only
+    //      by the device that already owns the student. This lets a student
+    //      migrate to a new device by going through their old one, while
+    //      blocking any random device from "claiming" or mutating the row.
+    //      A null `currentDeviceId` (e.g. legacy row) is treated as unowned
+    //      and can be claimed by the first device to sync.
     if (body.student && isControlNumber(body.student.numeroControl)) {
       const deviceId = isUuid(body.student.currentDeviceId)
         ? body.student.currentDeviceId
         : null;
-      await prisma.student.upsert({
-        where: { numeroControl: body.student.numeroControl },
-        create: {
-          numeroControl: body.student.numeroControl,
-          nombre: body.student.nombre,
-          apellidoPaterno: body.student.apellidoPaterno,
-          apellidoMaterno: body.student.apellidoMaterno,
-          sexo: body.student.sexo,
-          carrera: body.student.carrera as Carrera,
-          semestre: body.student.semestre,
-          currentDeviceId: deviceId,
-        },
-        update: {
-          nombre: body.student.nombre,
-          apellidoPaterno: body.student.apellidoPaterno,
-          apellidoMaterno: body.student.apellidoMaterno,
-          sexo: body.student.sexo,
-          carrera: body.student.carrera as Carrera,
-          semestre: body.student.semestre,
-          currentDeviceId: deviceId,
-        },
-      });
-      studentSynced = true;
+
+      if (!deviceId) {
+        console.warn(
+          "[api/sync] student sync requires a valid currentDeviceId UUID; skipped"
+        );
+      } else {
+        try {
+          const existing = await prisma.student.findUnique({
+            where: { numeroControl: body.student.numeroControl },
+            select: { currentDeviceId: true },
+          });
+
+          if (!existing) {
+            // First registration: create the student with master data.
+            await prisma.student.create({
+              data: {
+                numeroControl: body.student.numeroControl,
+                nombre: body.student.nombre,
+                apellidoPaterno: body.student.apellidoPaterno,
+                apellidoMaterno: body.student.apellidoMaterno,
+                sexo: body.student.sexo,
+                carrera: body.student.carrera as Carrera,
+                semestre: body.student.semestre,
+                currentDeviceId: deviceId,
+              },
+            });
+            studentSynced = true;
+          } else if (
+            existing.currentDeviceId === null ||
+            existing.currentDeviceId === deviceId
+          ) {
+            // Same (or previously-unowned) device: allow updating only the
+            // device pointer. Master data is intentionally not in this SET.
+            await prisma.student.update({
+              where: { numeroControl: body.student.numeroControl },
+              data: { currentDeviceId: deviceId },
+            });
+            studentSynced = true;
+          } else {
+            console.warn(
+              "[api/sync] refusing student sync: device does not own this student",
+              { numeroControl: body.student.numeroControl }
+            );
+          }
+        } catch (err) {
+          console.error("[api/sync] student sync failed", err);
+        }
+      }
     } else if (body.student) {
       console.warn("[api/sync] invalid student numeroControl, skipped");
     }
@@ -126,8 +162,14 @@ export async function POST(request: NextRequest) {
     // 3) Access records: idempotent upsert guarded by client_recorded_at.
     //    Clients may have sent older offline data after a newer sync already
     //    landed (e.g. from a different device), so we never overwrite newer
-    //    timestamps. `duration_minutes` is a GENERATED column and must not
-    //    appear in INSERT/UPDATE.
+    //    timestamps.
+    //
+    //    The additional `auto_closed = false` guard is critical: once the
+    //    server-side cron closes a session, that decision is authoritative.
+    //    A client coming online later (offline during the close, then
+    //    registers a `createExit()`) must NOT be able to rewrite the
+    //    auto-close timestamp. `duration_minutes` is a GENERATED column and
+    //    must not appear in INSERT/UPDATE.
     if (body.records?.length) {
       for (const record of body.records) {
         if (
@@ -164,6 +206,7 @@ export async function POST(request: NextRequest) {
               "client_recorded_at" = EXCLUDED."client_recorded_at",
               "synced_at"          = now()
             WHERE EXCLUDED."client_recorded_at" >= "access_records"."client_recorded_at"
+              AND "access_records"."auto_closed" = false
           `;
           syncedRecordIds.push(record.id);
         } catch (err) {

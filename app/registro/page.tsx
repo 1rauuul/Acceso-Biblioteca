@@ -27,6 +27,16 @@ interface FormErrors {
   semestre?: string;
 }
 
+interface StudentFormData {
+  numeroControl: string;
+  nombre: string;
+  apellidoPaterno: string;
+  apellidoMaterno: string;
+  sexo: string;
+  carrera: string;
+  semestre: string;
+}
+
 function validate(form: Record<string, string>): FormErrors {
   const errors: FormErrors = {};
   if (!form.numeroControl?.trim()) {
@@ -48,7 +58,7 @@ function validate(form: Record<string, string>): FormErrors {
 export default function RegistroPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<StudentFormData>({
     numeroControl: "",
     nombre: "",
     apellidoPaterno: "",
@@ -66,7 +76,7 @@ export default function RegistroPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const validationErrors = validate(form);
+    const validationErrors = validate(form as unknown as Record<string, string>);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
@@ -112,10 +122,7 @@ export default function RegistroPage() {
       </div>
       <LibraryHeader subtitle="Registro de estudiante" />
 
-      <form
-        onSubmit={handleSubmit}
-        className="flex flex-1 flex-col gap-5 px-6 py-6"
-      >
+      <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-5 px-6 py-6">
         <div className="flex items-center gap-3 rounded-2xl bg-primary/5 p-4">
           <UserPlus className="size-8 shrink-0 text-primary" strokeWidth={1.5} />
           <div>
@@ -187,10 +194,7 @@ export default function RegistroPage() {
         </div>
 
         <FieldGroup label="Sexo" error={errors.sexo} htmlFor="sexo">
-          <Select
-            value={form.sexo}
-            onValueChange={(v) => updateField("sexo", v)}
-          >
+          <Select value={form.sexo} onValueChange={(v) => updateField("sexo", v)}>
             <SelectTrigger id="sexo" aria-invalid={!!errors.sexo}>
               <SelectValue placeholder="Seleccionar" />
             </SelectTrigger>
@@ -219,11 +223,7 @@ export default function RegistroPage() {
           </Select>
         </FieldGroup>
 
-        <FieldGroup
-          label="Semestre"
-          error={errors.semestre}
-          htmlFor="semestre"
-        >
+        <FieldGroup label="Semestre" error={errors.semestre} htmlFor="semestre">
           <Select
             value={form.semestre}
             onValueChange={(v) => updateField("semestre", v)}
@@ -246,11 +246,7 @@ export default function RegistroPage() {
           disabled={loading}
           className="mt-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-primary p-4 text-lg font-bold text-primary-foreground shadow-lg transition-all duration-300 hover:bg-primary/90 active:scale-95 focus-visible:ring-4 focus-visible:ring-primary/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60"
         >
-          {loading ? (
-            <Loader2 className="size-5 animate-spin" />
-          ) : (
-            "REGISTRARME"
-          )}
+          {loading ? <Loader2 className="size-5 animate-spin" /> : "REGISTRARME"}
         </button>
       </form>
     </PageWrapper>

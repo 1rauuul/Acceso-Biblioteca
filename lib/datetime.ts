@@ -54,6 +54,27 @@ export function mxDayBounds(reference: Date = new Date()): {
   return { start, end };
 }
 
+/**
+ * Returns the UTC `Date` for today's closing time in Mexico-local
+ * (default: 18:00, i.e. 6 PM) for the Mexico-local day containing
+ * `reference`. Useful for reconciling local sessions that should have
+ * been auto-closed by the cron but never were (offline device).
+ */
+export function mxTodayCloseUtc(
+  reference: Date = new Date(),
+  closeHour = 18
+): Date {
+  const { start } = mxDayBounds(reference);
+  return mxWallTimeToUtc(
+    start.getUTCFullYear(),
+    start.getUTCMonth(),
+    start.getUTCDate(),
+    closeHour,
+    0,
+    0
+  );
+}
+
 const mxDateFmt = new Intl.DateTimeFormat("es-MX", {
   timeZone: LIBRARY_TIMEZONE,
   day: "2-digit",
