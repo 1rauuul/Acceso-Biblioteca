@@ -38,6 +38,15 @@ interface SurveyPayload {
   limpieza: number;
   mesas: number;
   silencio: number;
+  horarioConsulta?: number | null;
+  apoyoAsignaturas?: number | null;
+  disponibilidadBibliografia?: number | null;
+  bibliografiaActualizada?: number | null;
+  atencionBusqueda?: number | null;
+  orientacionEquivalentes?: number | null;
+  disposicionServicio?: number | null;
+  amabilidadAtencion?: number | null;
+  relacionAtenta?: number | null;
   comment: string;
   sourceDeviceId: string;
   clientRecordedAt: string;
@@ -61,6 +70,8 @@ const isUuid = (v: string | undefined | null): v is string =>
 const CONTROL_NUMBER_RE = /^\d{8}$/;
 const isControlNumber = (v: string | undefined | null): v is string =>
   !!v && CONTROL_NUMBER_RE.test(v);
+const isRating = (v: number | null | undefined): boolean =>
+  v === null || v === undefined || (Number.isInteger(v) && v >= 1 && v <= 5);
 
 export async function POST(request: NextRequest) {
   try {
@@ -68,6 +79,7 @@ export async function POST(request: NextRequest) {
     const syncedRecordIds: string[] = [];
     const syncedSurveyIds: string[] = [];
     let studentSynced = false;
+    let studentExists = false;
 
     // 1) Device upsert (every sync refreshes last_seen_at).
     if (body.device && isUuid(body.device.id)) {
@@ -118,6 +130,8 @@ export async function POST(request: NextRequest) {
             where: { numeroControl: body.student.numeroControl },
             select: { currentDeviceId: true },
           });
+
+          studentExists = existing !== null;
 
           if (!existing) {
             // First registration: create the student with master data.
@@ -223,7 +237,18 @@ export async function POST(request: NextRequest) {
           !isUuid(survey.id) ||
           !isUuid(survey.accessRecordId) ||
           !isUuid(survey.sourceDeviceId) ||
-          !isControlNumber(survey.numeroControl)
+          !isControlNumber(survey.numeroControl) ||
+          ![
+            survey.horarioConsulta,
+            survey.apoyoAsignaturas,
+            survey.disponibilidadBibliografia,
+            survey.bibliografiaActualizada,
+            survey.atencionBusqueda,
+            survey.orientacionEquivalentes,
+            survey.disposicionServicio,
+            survey.amabilidadAtencion,
+            survey.relacionAtenta,
+          ].every(isRating)
         ) {
           continue;
         }
@@ -237,6 +262,15 @@ export async function POST(request: NextRequest) {
               "limpieza",
               "mesas",
               "silencio",
+              "horario_consulta",
+              "apoyo_asignaturas",
+              "disponibilidad_bibliografia",
+              "bibliografia_actualizada",
+              "atencion_busqueda",
+              "orientacion_equivalentes",
+              "disposicion_servicio",
+              "amabilidad_atencion",
+              "relacion_atenta",
               "comment",
               "source_device_id",
               "client_recorded_at",
@@ -251,6 +285,15 @@ export async function POST(request: NextRequest) {
               ${survey.limpieza}::smallint,
               ${survey.mesas}::smallint,
               ${survey.silencio}::smallint,
+              ${survey.horarioConsulta ?? null}::smallint,
+              ${survey.apoyoAsignaturas ?? null}::smallint,
+              ${survey.disponibilidadBibliografia ?? null}::smallint,
+              ${survey.bibliografiaActualizada ?? null}::smallint,
+              ${survey.atencionBusqueda ?? null}::smallint,
+              ${survey.orientacionEquivalentes ?? null}::smallint,
+              ${survey.disposicionServicio ?? null}::smallint,
+              ${survey.amabilidadAtencion ?? null}::smallint,
+              ${survey.relacionAtenta ?? null}::smallint,
               ${survey.comment?.trim() || null},
               ${survey.sourceDeviceId}::uuid,
               ${new Date(survey.clientRecordedAt)},
@@ -296,6 +339,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       studentSynced,
+      studentExists,
       syncedRecordIds,
       syncedSurveyIds,
       serverRecords,

@@ -51,7 +51,9 @@ export default function AdminLoginPage() {
           <h1 className="text-2xl font-bold text-foreground">
             Panel Administrativo
           </h1>
-          <p className="text-sm text-muted-foreground">Biblioteca Escuela</p>
+          <p className="text-center text-sm text-muted-foreground">
+            Centro de Información · Instituto Tecnológico de Tehuacán
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">

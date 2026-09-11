@@ -30,6 +30,15 @@ export interface SurveyLocal {
   limpieza: number;
   mesas: number;
   silencio: number;
+  horarioConsulta: number | null;
+  apoyoAsignaturas: number | null;
+  disponibilidadBibliografia: number | null;
+  bibliografiaActualizada: number | null;
+  atencionBusqueda: number | null;
+  orientacionEquivalentes: number | null;
+  disposicionServicio: number | null;
+  amabilidadAtencion: number | null;
+  relacionAtenta: number | null;
   comment: string;
   sourceDeviceId: string;
   clientRecordedAt: string; // ISO — when the user submitted the survey
@@ -64,7 +73,7 @@ interface LibraryDB extends DBSchema {
 }
 
 const DB_NAME = "biblioteca-escuela";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const DEVICE_ID_KEY = "biblioteca-device-id";
 const UUID_RE =
@@ -96,6 +105,10 @@ function getOrCreateDeviceId(): string {
   const id = newUuid();
   localStorage.setItem(DEVICE_ID_KEY, id);
   return id;
+}
+
+export function getDeviceId(): string {
+  return getOrCreateDeviceId();
 }
 
 let dbPromise: Promise<IDBPDatabase<LibraryDB>> | null = null;
@@ -226,6 +239,15 @@ function getDB() {
                 limpieza: s.limpieza,
                 mesas: s.mesas,
                 silencio: s.silencio,
+                horarioConsulta: null,
+                apoyoAsignaturas: null,
+                disponibilidadBibliografia: null,
+                bibliografiaActualizada: null,
+                atencionBusqueda: null,
+                orientacionEquivalentes: null,
+                disposicionServicio: null,
+                amabilidadAtencion: null,
+                relacionAtenta: null,
                 comment: s.comment,
                 sourceDeviceId: deviceId,
                 clientRecordedAt: s.createdAt,
@@ -242,11 +264,43 @@ function getDB() {
               limpieza: s.limpieza,
               mesas: s.mesas,
               silencio: s.silencio,
+              horarioConsulta: null,
+              apoyoAsignaturas: null,
+              disponibilidadBibliografia: null,
+              bibliografiaActualizada: null,
+              atencionBusqueda: null,
+              orientacionEquivalentes: null,
+              disposicionServicio: null,
+              amabilidadAtencion: null,
+              relacionAtenta: null,
               comment: s.comment,
               sourceDeviceId: deviceId,
               clientRecordedAt: s.createdAt,
               createdAt: s.createdAt,
               synced: s.synced ?? false,
+            });
+          }
+        }
+
+        if (oldVersion < 3) {
+          const surveyStore = tx.objectStore("surveys");
+          const surveys = await surveyStore.getAll();
+          for (const survey of surveys) {
+            const legacySurvey = survey as SurveyLocal;
+            await surveyStore.put({
+              ...legacySurvey,
+              horarioConsulta: legacySurvey.horarioConsulta ?? null,
+              apoyoAsignaturas: legacySurvey.apoyoAsignaturas ?? null,
+              disponibilidadBibliografia:
+                legacySurvey.disponibilidadBibliografia ?? null,
+              bibliografiaActualizada:
+                legacySurvey.bibliografiaActualizada ?? null,
+              atencionBusqueda: legacySurvey.atencionBusqueda ?? null,
+              orientacionEquivalentes:
+                legacySurvey.orientacionEquivalentes ?? null,
+              disposicionServicio: legacySurvey.disposicionServicio ?? null,
+              amabilidadAtencion: legacySurvey.amabilidadAtencion ?? null,
+              relacionAtenta: legacySurvey.relacionAtenta ?? null,
             });
           }
         }
@@ -265,16 +319,28 @@ export async function getStudent(): Promise<StudentData | undefined> {
 }
 
 export async function saveStudent(
-  data: Omit<StudentData, "currentDeviceId" | "synced">
+  data: Omit<StudentData, "currentDeviceId" | "synced"> &
+    Partial<Pick<StudentData, "currentDeviceId" | "synced">>
 ): Promise<StudentData> {
   const db = await getDB();
   const student: StudentData = {
     ...data,
-    currentDeviceId: getOrCreateDeviceId(),
-    synced: false,
+    currentDeviceId: data.currentDeviceId ?? getOrCreateDeviceId(),
+    synced: data.synced ?? false,
   };
+  await db.clear("student");
   await db.put("student", student);
   return student;
+}
+
+export async function restoreActiveSession(
+  record: Omit<AccessRecordLocal, "synced"> &
+    Partial<Pick<AccessRecordLocal, "synced">>
+): Promise<AccessRecordLocal> {
+  const db = await getDB();
+  const session: AccessRecordLocal = { ...record, synced: record.synced ?? true };
+  await db.put("records", session);
+  return session;
 }
 
 export async function markStudentSynced(numeroControl: string) {
@@ -292,8 +358,12 @@ export async function getCurrentSession(): Promise<
   AccessRecordLocal | undefined
 > {
   const db = await getDB();
+  const student = await getStudent();
+  if (!student) return undefined;
   const all = await db.getAll("records");
-  return all.find((r) => r.exitTime === null);
+  return all.find(
+    (r) => r.numeroControl === student.numeroControl && r.exitTime === null
+  );
 }
 
 export async function createEntry(): Promise<AccessRecordLocal> {
@@ -486,6 +556,7 @@ export async function syncWithServer(): Promise<{
   syncedRecords: number;
   syncedSurveys: number;
   serverClosedRecords: number;
+  studentExists: boolean;
 }> {
   const { student, pendingRecords, pendingSurveys } = await getAllSyncData();
   const openRecordIds = await getOpenRecordIds();
@@ -498,7 +569,12 @@ export async function syncWithServer(): Promise<{
     pendingSurveys.length === 0 &&
     openRecordIds.length === 0
   ) {
-    return { syncedRecords: 0, syncedSurveys: 0, serverClosedRecords: 0 };
+    return {
+      syncedRecords: 0,
+      syncedSurveys: 0,
+      serverClosedRecords: 0,
+      studentExists: false,
+    };
   }
 
   const deviceId = getOrCreateDeviceId();
@@ -556,6 +632,7 @@ export async function syncWithServer(): Promise<{
     syncedRecords: result.syncedRecordIds?.length ?? 0,
     syncedSurveys: result.syncedSurveyIds?.length ?? 0,
     serverClosedRecords,
+    studentExists: result.studentExists ?? false,
   };
 }
 

@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
   // PDF
   const doc = new jsPDF({ orientation: "landscape" });
   doc.setFontSize(16);
-  doc.text("Biblioteca Escuela - Reporte de Registros", 14, 15);
+  doc.text("Centro de Información - Reporte de Registros", 14, 15);
   doc.setFontSize(10);
   doc.text(
     `Generado: ${formatMxDateTime(new Date())}`,

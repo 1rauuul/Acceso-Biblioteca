@@ -21,6 +21,46 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const MAX_PAGE = 10_000;
 
+const SURVEY_QUESTIONS = [
+  { key: "stars", label: "Experiencia general" },
+  { key: "limpieza", label: "Limpieza del espacio" },
+  { key: "mesas", label: "Disponibilidad de mesas" },
+  { key: "silencio", label: "Silencio y ambiente" },
+  { key: "horarioConsulta", label: "El horario de consulta es adecuado" },
+  {
+    key: "apoyoAsignaturas",
+    label: "La información disponible me apoya en mis asignaturas",
+  },
+  {
+    key: "disponibilidadBibliografia",
+    label: "Encuentro al menos un ejemplar de la bibliografía solicitada",
+  },
+  {
+    key: "bibliografiaActualizada",
+    label: "La bibliografía disponible está actualizada",
+  },
+  {
+    key: "atencionBusqueda",
+    label: "Recibo atención adecuada al buscar un libro",
+  },
+  {
+    key: "orientacionEquivalentes",
+    label: "Me orientan para encontrar libros equivalentes",
+  },
+  {
+    key: "disposicionServicio",
+    label: "Tienen disposición para atenderme cuando solicito un servicio",
+  },
+  {
+    key: "amabilidadAtencion",
+    label: "Me atienden amablemente cuando solicito apoyo",
+  },
+  {
+    key: "relacionAtenta",
+    label: "Mantienen una relación atenta durante mi estancia",
+  },
+] as const;
+
 function parsePositiveInt(
   raw: string | null,
   fallback: number,
@@ -115,6 +155,43 @@ export async function GET(request: NextRequest) {
     },
   });
 
+  const surveyResponses = await prisma.surveyResponse.findMany({
+    where: { accessRecord: where },
+    select: {
+      stars: true,
+      limpieza: true,
+      mesas: true,
+      silencio: true,
+      horarioConsulta: true,
+      apoyoAsignaturas: true,
+      disponibilidadBibliografia: true,
+      bibliografiaActualizada: true,
+      atencionBusqueda: true,
+      orientacionEquivalentes: true,
+      disposicionServicio: true,
+      amabilidadAtencion: true,
+      relacionAtenta: true,
+    },
+  });
+
+  const surveyQuestions = SURVEY_QUESTIONS.map(({ key, label }) => {
+    const values = surveyResponses
+      .map((response) => response[key as keyof typeof response])
+      .filter((value): value is number => value !== null);
+    return {
+      key,
+      label,
+      average:
+        values.length > 0
+          ? Math.round(
+              (values.reduce((sum, value) => sum + value, 0) / values.length) *
+                100
+            ) / 100
+          : null,
+      responses: values.length,
+    };
+  });
+
   const completed = allForMetrics.filter((r) => r.durationMinutes !== null);
   const avgDuration =
     completed.length > 0
@@ -175,6 +252,12 @@ export async function GET(request: NextRequest) {
       avgDuration,
       careerDistribution,
       sexDistribution,
+      survey: {
+        from: from || null,
+        to: to || null,
+        sampleSize: surveyResponses.length,
+        questions: surveyQuestions,
+      },
     },
   });
 }

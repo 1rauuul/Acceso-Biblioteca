@@ -1,6 +1,6 @@
 {
-  "name": "Biblioteca Escuela",
-  "short_name": "Biblioteca",
+  "name": "Centro de Información - Instituto Tecnológico de Tehuacán",
+  "short_name": "Centro de Información",
   "description": "Sistema de registro de acceso a la biblioteca escolar",
   "start_url": "/",
   "display": "standalone",

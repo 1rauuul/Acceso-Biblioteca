@@ -120,7 +120,8 @@ Esta es una migración destructiva (`migration C`) que cambia la PK de `students
    - `20260422000100_backfill_data` (aditiva, idempotente)
    - `20260422000200_repk_students_by_numero_control` (destructiva; rollback = restaurar snapshot)
    - `20260422000300_finalize_constraints_and_types` (tipos + GENERATED + CHECKs)
-   - `20260422000400_pg_cron_auto_close` (opcional; omite si tu plan de Supabase no tiene `pg_cron`)
+  - `20260422000400_pg_cron_auto_close` (opcional; omite si tu plan de Supabase no tiene `pg_cron`)
+  - `20260911000100_add_survey_feedback` (aditiva; agrega los nueve reactivos de satisfacción)
 
    Se despliegan automáticamente con `prisma migrate deploy` en el build de Vercel. Si prefieres aplicarlas manualmente desde local:
 
@@ -128,7 +129,7 @@ Esta es una migración destructiva (`migration C`) que cambia la PK de `students
    DATABASE_URL=$DIRECT_URL npx prisma migrate deploy
    ```
 
-4. **Deploy de la app** (cliente + server en el mismo commit). El cliente bump `DB_VERSION` a 2 de IndexedDB automáticamente al abrir la PWA; no hace falta que los usuarios reinstalen.
+4. **Deploy de la app** (cliente + server en el mismo commit). El cliente bump `DB_VERSION` a 3 de IndexedDB automáticamente al abrir la PWA; no hace falta que los usuarios reinstalen. Las encuestas antiguas conservan `NULL` en los nueve reactivos nuevos y no se incluyen como respuestas válidas en sus promedios.
 
 ### Queries de validación post-migración
 
@@ -141,6 +142,19 @@ FROM "access_records" WHERE "numero_control" IS NULL
 UNION ALL
 SELECT 'survey_responses', COUNT(*)
 FROM "survey_responses" WHERE "numero_control" IS NULL;
+
+-- 8. Los nuevos reactivos deben ser NULL o estar en la escala 1–5.
+SELECT COUNT(*) AS invalid_feedback
+FROM "survey_responses"
+WHERE "horario_consulta" IS NOT NULL AND "horario_consulta" NOT BETWEEN 1 AND 5
+  OR "apoyo_asignaturas" IS NOT NULL AND "apoyo_asignaturas" NOT BETWEEN 1 AND 5
+  OR "disponibilidad_bibliografia" IS NOT NULL AND "disponibilidad_bibliografia" NOT BETWEEN 1 AND 5
+  OR "bibliografia_actualizada" IS NOT NULL AND "bibliografia_actualizada" NOT BETWEEN 1 AND 5
+  OR "atencion_busqueda" IS NOT NULL AND "atencion_busqueda" NOT BETWEEN 1 AND 5
+  OR "orientacion_equivalentes" IS NOT NULL AND "orientacion_equivalentes" NOT BETWEEN 1 AND 5
+  OR "disposicion_servicio" IS NOT NULL AND "disposicion_servicio" NOT BETWEEN 1 AND 5
+  OR "amabilidad_atencion" IS NOT NULL AND "amabilidad_atencion" NOT BETWEEN 1 AND 5
+  OR "relacion_atenta" IS NOT NULL AND "relacion_atenta" NOT BETWEEN 1 AND 5;
 
 -- 2. Todos los children deben apuntar a un student existente.
 SELECT ar."id"

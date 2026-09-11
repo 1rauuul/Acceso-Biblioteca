@@ -102,6 +102,15 @@ model SurveyResponse {
   limpieza         Int          @db.SmallInt
   mesas            Int          @db.SmallInt
   silencio         Int          @db.SmallInt
+  horarioConsulta  Int?         @map("horario_consulta") @db.SmallInt
+  apoyoAsignaturas Int?         @map("apoyo_asignaturas") @db.SmallInt
+  disponibilidadBibliografia Int? @map("disponibilidad_bibliografia") @db.SmallInt
+  bibliografiaActualizada Int?   @map("bibliografia_actualizada") @db.SmallInt
+  atencionBusqueda Int?          @map("atencion_busqueda") @db.SmallInt
+  orientacionEquivalentes Int?   @map("orientacion_equivalentes") @db.SmallInt
+  disposicionServicio Int?       @map("disposicion_servicio") @db.SmallInt
+  amabilidadAtencion Int?        @map("amabilidad_atencion") @db.SmallInt
+  relacionAtenta Int?            @map("relacion_atenta") @db.SmallInt
   comment          String?
   sourceDeviceId   String       @map("source_device_id") @db.Uuid
   clientRecordedAt DateTime     @map("client_recorded_at") @db.Timestamptz(6)

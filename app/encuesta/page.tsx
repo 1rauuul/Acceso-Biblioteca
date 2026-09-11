@@ -22,6 +22,15 @@ export default function EncuestaPage() {
   const [limpieza, setLimpieza] = useState(3);
   const [mesas, setMesas] = useState(3);
   const [silencio, setSilencio] = useState(3);
+  const [horarioConsulta, setHorarioConsulta] = useState(3);
+  const [apoyoAsignaturas, setApoyoAsignaturas] = useState(3);
+  const [disponibilidadBibliografia, setDisponibilidadBibliografia] = useState(3);
+  const [bibliografiaActualizada, setBibliografiaActualizada] = useState(3);
+  const [atencionBusqueda, setAtencionBusqueda] = useState(3);
+  const [orientacionEquivalentes, setOrientacionEquivalentes] = useState(3);
+  const [disposicionServicio, setDisposicionServicio] = useState(3);
+  const [amabilidadAtencion, setAmabilidadAtencion] = useState(3);
+  const [relacionAtenta, setRelacionAtenta] = useState(3);
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -66,6 +75,15 @@ export default function EncuestaPage() {
         limpieza,
         mesas,
         silencio,
+        horarioConsulta,
+        apoyoAsignaturas,
+        disponibilidadBibliografia,
+        bibliografiaActualizada,
+        atencionBusqueda,
+        orientacionEquivalentes,
+        disposicionServicio,
+        amabilidadAtencion,
+        relacionAtenta,
         comment: comment.trim(),
       });
 
@@ -130,6 +148,60 @@ export default function EncuestaPage() {
             emoji="🤫"
             value={silencio}
             onChange={setSilencio}
+          />
+          <RatingSlider
+            label="El horario de consulta es adecuado"
+            emoji="🕒"
+            value={horarioConsulta}
+            onChange={setHorarioConsulta}
+          />
+          <RatingSlider
+            label="La información disponible me apoya en mis asignaturas"
+            emoji="📖"
+            value={apoyoAsignaturas}
+            onChange={setApoyoAsignaturas}
+          />
+          <RatingSlider
+            label="Siempre encuentro al menos un ejemplar de la bibliografía solicitada"
+            emoji="📚"
+            value={disponibilidadBibliografia}
+            onChange={setDisponibilidadBibliografia}
+          />
+          <RatingSlider
+            label="La bibliografía disponible está actualizada"
+            emoji="🗂️"
+            value={bibliografiaActualizada}
+            onChange={setBibliografiaActualizada}
+          />
+          <RatingSlider
+            label="Recibo atención adecuada al buscar un libro"
+            emoji="🔎"
+            value={atencionBusqueda}
+            onChange={setAtencionBusqueda}
+          />
+          <RatingSlider
+            label="Me orientan para encontrar libros equivalentes"
+            emoji="🧭"
+            value={orientacionEquivalentes}
+            onChange={setOrientacionEquivalentes}
+          />
+          <RatingSlider
+            label="Tienen disposición para atenderme cuando solicito un servicio"
+            emoji="🙋"
+            value={disposicionServicio}
+            onChange={setDisposicionServicio}
+          />
+          <RatingSlider
+            label="Me atienden amablemente cuando solicito apoyo"
+            emoji="🙂"
+            value={amabilidadAtencion}
+            onChange={setAmabilidadAtencion}
+          />
+          <RatingSlider
+            label="Mantienen una relación atenta conmigo durante mi estancia"
+            emoji="🤝"
+            value={relacionAtenta}
+            onChange={setRelacionAtenta}
           />
         </div>
 

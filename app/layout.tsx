@@ -10,7 +10,7 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
-const APP_NAME = "Biblioteca Escuela";
+const APP_NAME = "Centro de Información - Instituto Tecnológico de Tehuacán";
 const APP_DESCRIPTION = "Sistema de registro de acceso a la biblioteca escolar";
 
 export const viewport: Viewport = {

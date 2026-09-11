@@ -15,3 +15,10 @@ export const CARRERAS = [
 export const SEMESTRES = Array.from({ length: 12 }, (_, i) => i + 1);
 
 export const LIBRARY_CLOSE_HOUR = 18; // 6 PM
+
+export const LIBRARY_QR_ACCESS_TOKEN = "BIBLIOTECA_ACCESO";
+export const VALID_QR_TOKENS = [
+  "BIBLIOTECA_ACCESO",
+  "ACCESO_BIBLIOTECA",
+  "BIBLIO_ENTRY",
+] as const;

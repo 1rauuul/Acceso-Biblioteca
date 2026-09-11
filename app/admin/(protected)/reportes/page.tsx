@@ -52,6 +52,17 @@ interface ReportData {
       visitas: number;
       porcentaje: number;
     }[];
+    survey: {
+      from: string | null;
+      to: string | null;
+      sampleSize: number;
+      questions: {
+        key: string;
+        label: string;
+        average: number | null;
+        responses: number;
+      }[];
+    };
   };
 }
 
@@ -111,7 +122,8 @@ export default function ReportesPage() {
   }, [filters, page]);
 
   useEffect(() => {
-    fetchData();
+    const request = window.setTimeout(() => void fetchData(), 0);
+    return () => window.clearTimeout(request);
   }, [fetchData]);
 
   const handleExport = (format: "xlsx" | "pdf") => {
@@ -266,6 +278,43 @@ export default function ReportesPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {data?.metrics.survey && (
+        <section className="rounded-xl border border-border bg-card p-4">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-foreground">
+                Resultados de encuestas
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Periodo: {data.metrics.survey.from ?? "Inicio"} a{" "}
+                {data.metrics.survey.to ?? "actualidad"}
+              </p>
+            </div>
+            <p className="text-sm font-medium text-muted-foreground">
+              Muestra: {data.metrics.survey.sampleSize} encuestas
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {data.metrics.survey.questions.map((question) => (
+              <div
+                key={question.key}
+                className="flex items-start justify-between gap-4 border-t border-border pt-3"
+              >
+                <p className="text-sm text-foreground">{question.label}</p>
+                <p className="shrink-0 text-right text-sm font-semibold">
+                  {question.average === null
+                    ? "Sin datos"
+                    : `${question.average.toFixed(2)} / 5`}
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    {question.responses} respuestas
+                  </span>
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Export buttons */}

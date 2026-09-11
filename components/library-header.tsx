@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { BookOpen } from "lucide-react";
+import { useSyncExternalStore } from "react";
+import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 
 interface LibraryHeaderProps {
@@ -9,21 +9,18 @@ interface LibraryHeaderProps {
 }
 
 export function LibraryHeader({ subtitle }: LibraryHeaderProps) {
-  const [isOnline, setIsOnline] = useState(true);
-
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
+  const isOnline = useSyncExternalStore(
+    (onStoreChange) => {
+      window.addEventListener("online", onStoreChange);
+      window.addEventListener("offline", onStoreChange);
+      return () => {
+        window.removeEventListener("online", onStoreChange);
+        window.removeEventListener("offline", onStoreChange);
+      };
+    },
+    () => navigator.onLine,
+    () => true
+  );
 
   return (
     <header className="relative flex flex-col items-center gap-2 px-4 pt-6 pb-2">
@@ -44,11 +41,19 @@ export function LibraryHeader({ subtitle }: LibraryHeaderProps) {
         className="flex size-16 items-center justify-center rounded-2xl bg-primary/10"
         aria-hidden="true"
       >
-        <BookOpen className="size-9 text-primary" strokeWidth={1.5} />
+        <Image
+          src="/logo-itt.jpg"
+          alt=""
+          width={64}
+          height={64}
+          className="size-16 rounded-2xl object-contain"
+        />
       </div>
 
-      <h1 className="text-center text-4xl font-bold tracking-tight text-foreground">
-        Biblioteca Escuela
+      <h1 className="text-center text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl">
+        <span className="block">Tecnológico Nacional de México</span>
+        <span className="block">Instituto Tecnológico de Tehuacán</span>
+        <span className="block">Centro de Información</span>
       </h1>
 
       {subtitle && (

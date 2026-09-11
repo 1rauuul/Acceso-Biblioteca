@@ -1,4 +1,4 @@
-# Biblioteca Escuela — PWA de control de acceso
+# Centro de Información — Instituto Tecnológico de Tehuacán
 
 PWA offline-first para registrar entradas y salidas de estudiantes a la biblioteca escolar, con encuestas de satisfacción y panel administrativo con reportes.
 

@@ -2,13 +2,13 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   FileBarChart,
   LogOut,
   ArrowLeft,
-  BookOpen,
   Menu,
   X,
   QrCode,
@@ -58,10 +58,16 @@ export function AdminShell({ children, userName }: AdminShellProps) {
       >
         <div className="flex items-center gap-3 border-b border-border px-4 py-5">
           <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
-            <BookOpen className="size-5 text-primary" />
+              <Image
+                src="/logo-itt.jpg"
+                alt=""
+                width={36}
+                height={36}
+                className="size-9 rounded-lg object-contain"
+              />
           </div>
           <div>
-            <p className="text-sm font-semibold text-foreground">Biblioteca</p>
+            <p className="text-sm font-semibold text-foreground">Centro de Información</p>
             <p className="text-xs text-muted-foreground">Panel Admin</p>
           </div>
           <button
