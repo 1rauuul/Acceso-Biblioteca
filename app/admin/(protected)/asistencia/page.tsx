@@ -1,16 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Download, ChevronLeft, ChevronRight, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Download, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -19,7 +10,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CARRERAS, SEMESTRES } from "@/lib/constants";
+import {
+  ReportFilterBar,
+  reportFilterParams,
+  EMPTY_REPORT_FILTERS,
+  type ReportFilterState,
+} from "@/components/admin/report-filter-bar";
 
 interface RecordRow {
   id: string;
@@ -52,17 +48,6 @@ interface ReportData {
       visitas: number;
       porcentaje: number;
     }[];
-    survey: {
-      from: string | null;
-      to: string | null;
-      sampleSize: number;
-      questions: {
-        key: string;
-        label: string;
-        average: number | null;
-        responses: number;
-      }[];
-    };
   };
 }
 
@@ -90,26 +75,17 @@ function formatDuration(minutes: number | null): string {
   return h > 0 ? `${h}h ${m}min` : `${m}min`;
 }
 
-export default function ReportesPage() {
+export default function AsistenciaPage() {
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
-    from: "",
-    to: "",
-    carrera: "",
-    semestre: "",
-    sexo: "",
-  });
+  const [filters, setFilters] = useState<ReportFilterState>(
+    EMPTY_REPORT_FILTERS
+  );
   const [page, setPage] = useState(1);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filters.from) params.set("from", filters.from);
-    if (filters.to) params.set("to", filters.to);
-    if (filters.carrera) params.set("carrera", filters.carrera);
-    if (filters.semestre) params.set("semestre", filters.semestre);
-    if (filters.sexo) params.set("sexo", filters.sexo);
+    const params = reportFilterParams(filters);
     params.set("page", String(page));
 
     try {
@@ -127,12 +103,8 @@ export default function ReportesPage() {
   }, [fetchData]);
 
   const handleExport = (format: "xlsx" | "pdf") => {
-    const params = new URLSearchParams();
-    if (filters.from) params.set("from", filters.from);
-    if (filters.to) params.set("to", filters.to);
-    if (filters.carrera) params.set("carrera", filters.carrera);
-    if (filters.semestre) params.set("semestre", filters.semestre);
-    if (filters.sexo) params.set("sexo", filters.sexo);
+    const params = reportFilterParams(filters);
+    params.set("section", "registros");
     params.set("format", format);
     window.open(`/api/export?${params}`, "_blank");
   };
@@ -140,104 +112,14 @@ export default function ReportesPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Filters */}
-      <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-8">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="from" className="text-xs">
-            Desde
-          </Label>
-          <Input
-            id="from"
-            type="date"
-            value={filters.from}
-            onChange={(e) =>
-              setFilters((p) => ({ ...p, from: e.target.value }))
-            }
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="to" className="text-xs">
-            Hasta
-          </Label>
-          <Input
-            id="to"
-            type="date"
-            value={filters.to}
-            onChange={(e) => setFilters((p) => ({ ...p, to: e.target.value }))}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5 lg:col-span-3">
-          <Label className="text-xs">Carrera</Label>
-          <Select
-            value={filters.carrera}
-            onValueChange={(v) =>
-              setFilters((p) => ({ ...p, carrera: v === "ALL" ? "" : v }))
-            }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Todas" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todas</SelectItem>
-              {CARRERAS.map((c) => (
-                <SelectItem key={c.value} value={c.value}>
-                  {c.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Semestre</Label>
-          <Select
-            value={filters.semestre}
-            onValueChange={(v) =>
-              setFilters((p) => ({ ...p, semestre: v === "ALL" ? "" : v }))
-            }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Todos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todos</SelectItem>
-              {SEMESTRES.map((s) => (
-                <SelectItem key={s} value={String(s)}>
-                  {s}°
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Sexo</Label>
-          <Select
-            value={filters.sexo}
-            onValueChange={(v) =>
-              setFilters((p) => ({ ...p, sexo: v === "ALL" ? "" : v }))
-            }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Todos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todos</SelectItem>
-              <SelectItem value="M">Masculino</SelectItem>
-              <SelectItem value="F">Femenino</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-end gap-2">
-          <button
-            onClick={() => {
-              setPage(1);
-              fetchData();
-            }}
-            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <Search className="size-4" />
-            Buscar
-          </button>
-        </div>
-      </div>
+      <ReportFilterBar
+        filters={filters}
+        onChange={setFilters}
+        onSearch={() => {
+          setPage(1);
+          fetchData();
+        }}
+      />
 
       {/* Metrics summary */}
       {data?.metrics && (
@@ -278,43 +160,6 @@ export default function ReportesPage() {
             </div>
           ))}
         </div>
-      )}
-
-      {data?.metrics.survey && (
-        <section className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-foreground">
-                Resultados de encuestas
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Periodo: {data.metrics.survey.from ?? "Inicio"} a{" "}
-                {data.metrics.survey.to ?? "actualidad"}
-              </p>
-            </div>
-            <p className="text-sm font-medium text-muted-foreground">
-              Muestra: {data.metrics.survey.sampleSize} encuestas
-            </p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            {data.metrics.survey.questions.map((question) => (
-              <div
-                key={question.key}
-                className="flex items-start justify-between gap-4 border-t border-border pt-3"
-              >
-                <p className="text-sm text-foreground">{question.label}</p>
-                <p className="shrink-0 text-right text-sm font-semibold">
-                  {question.average === null
-                    ? "Sin datos"
-                    : `${question.average.toFixed(2)} / 5`}
-                  <span className="block text-xs font-normal text-muted-foreground">
-                    {question.responses} respuestas
-                  </span>
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
       )}
 
       {/* Export buttons */}

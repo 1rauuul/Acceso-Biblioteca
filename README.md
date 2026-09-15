@@ -10,7 +10,7 @@ Stack: **Next.js 16 · React 19 · Prisma 7 · Supabase Postgres · Serwist (PWA
 
 - **Registro offline** de entradas/salidas en IndexedDB; se sincronizan al backend cuando hay red (Background Sync API).
 - **Encuesta opcional** al salir, máximo una vez cada 30 días por dispositivo.
-- **Panel admin** protegido con JWT (cookie httpOnly) y Bcrypt, con dashboard, reportes filtrables y exportación a Excel/PDF.
+- **Panel admin** protegido con JWT (cookie httpOnly) y Bcrypt, con dashboard, pantallas de asistencia y encuestas filtrables, y exportación a Excel/PDF.
 - **Cron diario de auto-cierre** (`/api/cron/auto-close`) que cierra sesiones olvidadas estimando duración con el promedio de las últimas visitas del estudiante.
 - **QR de instalación** generable desde el panel para imprimir y pegar en la entrada.
 
@@ -73,11 +73,11 @@ app/
   registro/             -> Alta del estudiante (datos persistentes en IndexedDB)
   entrada/, salida/     -> Botones grandes de check-in/check-out
   encuesta/             -> Encuesta de satisfacción
-  admin/(protected)/    -> Dashboard, reportes, cuenta y QR (requiere login)
+  admin/(protected)/    -> Dashboard, asistencia, encuestas, cuenta y QR (requiere login)
   api/
     sync/               -> Endpoint de sincronización IndexedDB <-> Postgres
     auth/               -> login / logout / change-password / me
-    dashboard/, reports/, export/ -> Datos para el panel
+    dashboard/, reports/, surveys/, export/ -> Datos para el panel
     cron/auto-close/    -> Cron diario protegido por CRON_SECRET
   sw.ts, serwist.ts     -> Service worker (Serwist)
 components/             -> UI compartida (admin shell, header, botones, etc.)

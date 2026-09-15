@@ -6,7 +6,8 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
-  FileBarChart,
+  CalendarCheck,
+  ClipboardList,
   LogOut,
   ArrowLeft,
   Menu,
@@ -19,7 +20,8 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/reportes", label: "Reportes", icon: FileBarChart },
+  { href: "/admin/asistencia", label: "Asistencia", icon: CalendarCheck },
+  { href: "/admin/encuestas", label: "Encuestas", icon: ClipboardList },
   { href: "/admin/qr", label: "QR Instalación", icon: QrCode },
   { href: "/admin/cuenta", label: "Mi cuenta", icon: UserCog },
 ];

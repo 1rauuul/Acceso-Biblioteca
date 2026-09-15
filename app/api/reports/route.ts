@@ -1,17 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { Carrera, Sexo } from "@/lib/generated/prisma/enums";
-import { mxWallTimeToUtc } from "@/lib/datetime";
-
-// Parse "YYYY-MM-DD" as the start (00:00) of that Mexico-local day.
-// Returns the equivalent UTC Date.
-function parseMxDateStart(input: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
-  if (!match) return null;
-  const [, y, m, d] = match;
-  return mxWallTimeToUtc(Number(y), Number(m) - 1, Number(d), 0, 0, 0);
-}
+import { parseReportFilters } from "@/lib/report-filters";
 
 // Clamp pagination params to safe ranges. NaN, negatives, zero, or absurd
 // values would otherwise produce 500s, infinite totalPages, or pull huge
@@ -20,46 +10,6 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const MAX_PAGE = 10_000;
-
-const SURVEY_QUESTIONS = [
-  { key: "stars", label: "Experiencia general" },
-  { key: "limpieza", label: "Limpieza del espacio" },
-  { key: "mesas", label: "Disponibilidad de mesas" },
-  { key: "silencio", label: "Silencio y ambiente" },
-  { key: "horarioConsulta", label: "El horario de consulta es adecuado" },
-  {
-    key: "apoyoAsignaturas",
-    label: "La información disponible me apoya en mis asignaturas",
-  },
-  {
-    key: "disponibilidadBibliografia",
-    label: "Encuentro al menos un ejemplar de la bibliografía solicitada",
-  },
-  {
-    key: "bibliografiaActualizada",
-    label: "La bibliografía disponible está actualizada",
-  },
-  {
-    key: "atencionBusqueda",
-    label: "Recibo atención adecuada al buscar un libro",
-  },
-  {
-    key: "orientacionEquivalentes",
-    label: "Me orientan para encontrar libros equivalentes",
-  },
-  {
-    key: "disposicionServicio",
-    label: "Tienen disposición para atenderme cuando solicito un servicio",
-  },
-  {
-    key: "amabilidadAtencion",
-    label: "Me atienden amablemente cuando solicito apoyo",
-  },
-  {
-    key: "relacionAtenta",
-    label: "Mantienen una relación atenta durante mi estancia",
-  },
-] as const;
 
 function parsePositiveInt(
   raw: string | null,
@@ -80,48 +30,13 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = request.nextUrl;
-  const from = searchParams.get("from");
-  const to = searchParams.get("to");
-  const carrera = searchParams.get("carrera");
-  const semestre = searchParams.get("semestre");
-  const sexo = searchParams.get("sexo");
+  const { where } = parseReportFilters(searchParams);
   const page = parsePositiveInt(searchParams.get("page"), DEFAULT_PAGE, MAX_PAGE);
   const limit = parsePositiveInt(
     searchParams.get("limit"),
     DEFAULT_LIMIT,
     MAX_LIMIT
   );
-
-  const where: Record<string, unknown> = {};
-  const studentWhere: Record<string, unknown> = {};
-
-  if (from || to) {
-    where.entryTime = {};
-    if (from) {
-      // Only accept strict YYYY-MM-DD; arbitrary strings would otherwise
-      // become `Invalid Date` and 500 the endpoint.
-      const fromDate = parseMxDateStart(from);
-      if (fromDate) {
-        (where.entryTime as Record<string, unknown>).gte = fromDate;
-      }
-    }
-    if (to) {
-      const toStart = parseMxDateStart(to);
-      if (toStart) {
-        const toDate = new Date(toStart.getTime() + 24 * 60 * 60 * 1000);
-        (where.entryTime as Record<string, unknown>).lt = toDate;
-      }
-    }
-  }
-
-  if (carrera) studentWhere.carrera = carrera as Carrera;
-  if (semestre && /^\d{1,2}$/.test(semestre)) {
-    studentWhere.semestre = parseInt(semestre, 10);
-  }
-  if (sexo === "M" || sexo === "F") studentWhere.sexo = sexo as Sexo;
-  if (Object.keys(studentWhere).length > 0) {
-    where.student = studentWhere;
-  }
 
   const [records, total] = await Promise.all([
     prisma.accessRecord.findMany({
@@ -153,43 +68,6 @@ export async function GET(request: NextRequest) {
       entryTime: true,
       student: { select: { carrera: true, sexo: true } },
     },
-  });
-
-  const surveyResponses = await prisma.surveyResponse.findMany({
-    where: { accessRecord: where },
-    select: {
-      stars: true,
-      limpieza: true,
-      mesas: true,
-      silencio: true,
-      horarioConsulta: true,
-      apoyoAsignaturas: true,
-      disponibilidadBibliografia: true,
-      bibliografiaActualizada: true,
-      atencionBusqueda: true,
-      orientacionEquivalentes: true,
-      disposicionServicio: true,
-      amabilidadAtencion: true,
-      relacionAtenta: true,
-    },
-  });
-
-  const surveyQuestions = SURVEY_QUESTIONS.map(({ key, label }) => {
-    const values = surveyResponses
-      .map((response) => response[key as keyof typeof response])
-      .filter((value): value is number => value !== null);
-    return {
-      key,
-      label,
-      average:
-        values.length > 0
-          ? Math.round(
-              (values.reduce((sum, value) => sum + value, 0) / values.length) *
-                100
-            ) / 100
-          : null,
-      responses: values.length,
-    };
   });
 
   const completed = allForMetrics.filter((r) => r.durationMinutes !== null);
@@ -252,12 +130,6 @@ export async function GET(request: NextRequest) {
       avgDuration,
       careerDistribution,
       sexDistribution,
-      survey: {
-        from: from || null,
-        to: to || null,
-        sampleSize: surveyResponses.length,
-        questions: surveyQuestions,
-      },
     },
   });
 }

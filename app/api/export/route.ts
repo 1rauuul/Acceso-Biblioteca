@@ -1,72 +1,118 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { Carrera } from "@/lib/generated/prisma/enums";
-import { formatMxDateTime, mxWallTimeToUtc } from "@/lib/datetime";
+import { formatMxDateTime } from "@/lib/datetime";
+import { parseReportFilters } from "@/lib/report-filters";
+import {
+  SURVEY_ANSWER_SELECT,
+  buildSurveySummary,
+  type SurveySummary,
+} from "@/lib/survey-stats";
 import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
-export async function GET(request: NextRequest) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+function attachment(
+  body: Buffer | ArrayBuffer,
+  contentType: string,
+  filename: string
+): NextResponse {
+  return new NextResponse(body, {
+    headers: {
+      "Content-Type": contentType,
+      "Content-Disposition": `attachment; filename=${filename}`,
+    },
+  });
+}
+
+function surveyPeriodLabel(summary: SurveySummary): string {
+  return `Periodo: ${summary.from ?? "Inicio"} a ${
+    summary.to ?? "actualidad"
+  }  |  Muestra: ${summary.sampleSize} encuestas`;
+}
+
+async function exportSurveys(
+  format: "xlsx" | "pdf",
+  where: Record<string, unknown>,
+  from: string | null,
+  to: string | null
+): Promise<NextResponse> {
+  const responses = await prisma.surveyResponse.findMany({
+    where: { accessRecord: where },
+    select: SURVEY_ANSWER_SELECT,
+  });
+  const summary = buildSurveySummary(responses, from, to);
+
+  if (format === "xlsx") {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Encuestas");
+    sheet.getColumn(1).width = 60;
+    sheet.getColumn(2).width = 15;
+    sheet.getColumn(3).width = 12;
+
+    sheet.addRow([surveyPeriodLabel(summary)]);
+    sheet.addRow([]);
+    const header = sheet.addRow(["Pregunta", "Promedio", "Respuestas"]);
+    for (const question of summary.questions) {
+      sheet.addRow([
+        question.label,
+        question.average === null
+          ? "Sin datos"
+          : `${question.average.toFixed(2)} / 5`,
+        question.responses,
+      ]);
+    }
+
+    header.eachCell((cell) => {
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF1E40AF" },
+      };
+      cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return attachment(
+      buffer,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      `biblioteca-encuestas-${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
   }
 
-  const { searchParams } = request.nextUrl;
-  const formatRaw = searchParams.get("format") || "xlsx";
-  // Whitelist the export format. Anything else falls back to xlsx so a
-  // crafted query string can't be used to probe or surprise the renderer.
-  const format = formatRaw === "pdf" ? "pdf" : "xlsx";
-  const from = searchParams.get("from");
-  const to = searchParams.get("to");
-  const carrera = searchParams.get("carrera");
-  const semestre = searchParams.get("semestre");
-  // `semestre` arrives as a query string; reject anything non-numeric so we
-  // don't push garbage into Prisma filters.
-  const semestreNum =
-    semestre && /^\d{1,2}$/.test(semestre) ? parseInt(semestre, 10) : null;
+  const doc = new jsPDF({ orientation: "landscape" });
+  doc.setFontSize(16);
+  doc.text("Centro de Información - Reporte de Encuestas", 14, 15);
+  doc.setFontSize(10);
+  doc.text(`Generado: ${formatMxDateTime(new Date())}`, 14, 22);
+  doc.text(surveyPeriodLabel(summary), 14, 28);
 
-  const where: Record<string, unknown> = {};
-  const studentWhere: Record<string, unknown> = {};
+  autoTable(doc, {
+    startY: 34,
+    head: [["Pregunta", "Promedio", "Respuestas"]],
+    body: summary.questions.map((question) => [
+      question.label,
+      question.average === null
+        ? "Sin datos"
+        : `${question.average.toFixed(2)} / 5`,
+      String(question.responses),
+    ]),
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [30, 64, 175] },
+  });
 
-  if (from || to) {
-    where.entryTime = {};
-    if (from) {
-      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(from);
-      if (m) {
-        const fromDate = mxWallTimeToUtc(
-          Number(m[1]),
-          Number(m[2]) - 1,
-          Number(m[3]),
-          0,
-          0,
-          0
-        );
-        (where.entryTime as Record<string, unknown>).gte = fromDate;
-      }
-    }
-    if (to) {
-      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(to);
-      if (m) {
-        const toStart = mxWallTimeToUtc(
-          Number(m[1]),
-          Number(m[2]) - 1,
-          Number(m[3]),
-          0,
-          0,
-          0
-        );
-        const toDate = new Date(toStart.getTime() + 24 * 60 * 60 * 1000);
-        (where.entryTime as Record<string, unknown>).lt = toDate;
-      }
-    }
-  }
+  const pdfBuffer = doc.output("arraybuffer");
+  return attachment(
+    pdfBuffer,
+    "application/pdf",
+    `biblioteca-encuestas-${new Date().toISOString().slice(0, 10)}.pdf`
+  );
+}
 
-  if (carrera) studentWhere.carrera = carrera as Carrera;
-  if (semestreNum !== null) studentWhere.semestre = semestreNum;
-  if (Object.keys(studentWhere).length > 0) where.student = studentWhere;
-
+async function exportRecords(
+  format: "xlsx" | "pdf",
+  where: Record<string, unknown>
+): Promise<NextResponse> {
   const records = await prisma.accessRecord.findMany({
     where,
     include: {
@@ -127,13 +173,11 @@ export async function GET(request: NextRequest) {
     rows.forEach((row) => sheet.addRow(row));
 
     const buffer = await workbook.xlsx.writeBuffer();
-    return new NextResponse(buffer, {
-      headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename=biblioteca-registros-${new Date().toISOString().slice(0, 10)}.xlsx`,
-      },
-    });
+    return attachment(
+      buffer,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      `biblioteca-registros-${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
   }
 
   // PDF
@@ -141,11 +185,7 @@ export async function GET(request: NextRequest) {
   doc.setFontSize(16);
   doc.text("Centro de Información - Reporte de Registros", 14, 15);
   doc.setFontSize(10);
-  doc.text(
-    `Generado: ${formatMxDateTime(new Date())}`,
-    14,
-    22
-  );
+  doc.text(`Generado: ${formatMxDateTime(new Date())}`, 14, 22);
 
   autoTable(doc, {
     startY: 28,
@@ -174,10 +214,31 @@ export async function GET(request: NextRequest) {
   });
 
   const pdfBuffer = doc.output("arraybuffer");
-  return new NextResponse(pdfBuffer, {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename=biblioteca-registros-${new Date().toISOString().slice(0, 10)}.pdf`,
-    },
-  });
+  return attachment(
+    pdfBuffer,
+    "application/pdf",
+    `biblioteca-registros-${new Date().toISOString().slice(0, 10)}.pdf`
+  );
+}
+
+export async function GET(request: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const { searchParams } = request.nextUrl;
+  const formatRaw = searchParams.get("format") || "xlsx";
+  // Whitelist the export format. Anything else falls back to xlsx so a
+  // crafted query string can't be used to probe or surprise the renderer.
+  const format = formatRaw === "pdf" ? "pdf" : "xlsx";
+  const section =
+    searchParams.get("section") === "encuestas" ? "encuestas" : "registros";
+
+  const { from, to, where } = parseReportFilters(searchParams);
+
+  if (section === "encuestas") {
+    return exportSurveys(format, where, from, to);
+  }
+  return exportRecords(format, where);
 }
