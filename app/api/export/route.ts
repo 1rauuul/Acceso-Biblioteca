@@ -17,7 +17,9 @@ function attachment(
   contentType: string,
   filename: string
 ): NextResponse {
-  return new NextResponse(body, {
+  // NextResponse accepts both at runtime; the DOM BodyInit types simply
+  // don't declare Buffer, so the cast is only for the compiler.
+  return new NextResponse(body as BodyInit, {
     headers: {
       "Content-Type": contentType,
       "Content-Disposition": `attachment; filename=${filename}`,
