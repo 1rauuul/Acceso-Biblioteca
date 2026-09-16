@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Download } from "lucide-react";
+import { Download, Megaphone } from "lucide-react";
 import {
   ReportFilterBar,
   reportFilterParams,
@@ -21,12 +21,45 @@ interface SurveyData {
   }[];
 }
 
+interface CampaignStatus {
+  launchedAt: string | null;
+  responsesSince: number;
+}
+
+function formatLaunchDate(iso: string) {
+  return new Date(iso).toLocaleString("es-MX", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Mexico_City",
+  });
+}
+
 export default function EncuestasPage() {
   const [data, setData] = useState<SurveyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ReportFilterState>(
     EMPTY_REPORT_FILTERS
   );
+  const [campaign, setCampaign] = useState<CampaignStatus | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [launching, setLaunching] = useState(false);
+
+  const fetchCampaign = useCallback(async () => {
+    try {
+      const res = await fetch("/api/surveys/status");
+      if (res.ok) setCampaign(await res.json());
+    } catch {
+      // Silently fail
+    }
+  }, []);
+
+  useEffect(() => {
+    const request = window.setTimeout(() => void fetchCampaign(), 0);
+    return () => window.clearTimeout(request);
+  }, [fetchCampaign]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -46,6 +79,21 @@ export default function EncuestasPage() {
     return () => window.clearTimeout(request);
   }, [fetchData]);
 
+  const handleLaunch = async () => {
+    setConfirming(false);
+    setLaunching(true);
+    try {
+      const res = await fetch("/api/surveys/launch", { method: "POST" });
+      if (res.ok) {
+        await fetchCampaign();
+        fetchData();
+      }
+    } catch {
+      // Silently fail
+    }
+    setLaunching(false);
+  };
+
   const handleExport = (format: "xlsx" | "pdf") => {
     const params = reportFilterParams(filters);
     params.set("section", "encuestas");
@@ -61,6 +109,53 @@ export default function EncuestasPage() {
         onChange={setFilters}
         onSearch={fetchData}
       />
+
+      {/* Campaign control */}
+      <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">
+            Campaña de encuestas
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {campaign?.launchedAt ? (
+              <>
+                Lanzada el {formatLaunchDate(campaign.launchedAt)} —{" "}
+                {campaign.responsesSince} respuestas recibidas desde entonces
+              </>
+            ) : (
+              "Sin encuesta lanzada. Solo se pedirá a quienes visiten la biblioteca por primera vez."
+            )}
+          </p>
+        </div>
+        {confirming ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <p className="text-sm text-muted-foreground">
+              Se pedirá encuesta a todos de nuevo. ¿Confirmar?
+            </p>
+            <button
+              onClick={handleLaunch}
+              className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Sí, lanzar
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="rounded-lg border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirming(true)}
+            disabled={launching}
+            className="flex shrink-0 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+          >
+            <Megaphone className="size-4" />
+            {launching ? "Lanzando..." : "Lanzar encuesta"}
+          </button>
+        )}
+      </section>
 
       {/* Summary cards */}
       {data && (

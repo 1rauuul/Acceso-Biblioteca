@@ -4,7 +4,7 @@
   "crons": [
     {
       "path": "/api/cron/auto-close",
-      "schedule": "5 0 * * *"
+      "schedule": "3 0 * * *"
     }
   ]
 }

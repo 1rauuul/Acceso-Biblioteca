@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { LIBRARY_CLOSE_HOUR } from "@/lib/constants";
+import { LIBRARY_CLOSE_HOUR, LIBRARY_MAX_SESSION_MINUTES } from "@/lib/constants";
 import { mxDayBounds, mxWallTimeToUtc } from "@/lib/datetime";
 
 async function handler(request: NextRequest) {
@@ -33,9 +33,9 @@ async function handler(request: NextRequest) {
     todayClose: todayClose.toISOString(),
   });
 
-  // Single UPDATE that closes every open session with the smaller of
-  //   (entry_time + per-student average duration) vs today's closing time,
-  //   but never before entry_time.
+  // Single UPDATE that closes every open session with the smallest of
+  //   (entry_time + per-student average duration) vs (entry_time + 3h, RN-03)
+  //   vs today's closing time, but never before entry_time.
   // Average is computed over the student's last 20 non-auto-closed visits;
   // if there's no history we fall back to 120 minutes.
   // `duration_minutes` is a GENERATED STORED column and is recomputed
@@ -59,6 +59,7 @@ async function handler(request: NextRequest) {
             ) h
           ), 120) * INTERVAL '1 minute'
         ),
+        ar."entry_time" + ${LIBRARY_MAX_SESSION_MINUTES} * INTERVAL '1 minute',
         ${todayClose}::timestamptz
       ),
       "auto_closed" = true

@@ -38,7 +38,8 @@ export interface SurveyLocal {
   orientacionEquivalentes: number | null;
   disposicionServicio: number | null;
   amabilidadAtencion: number | null;
-  relacionAtenta: number | null;
+  // No longer collected (kept optional for rows saved by older clients).
+  relacionAtenta?: number | null;
   comment: string;
   sourceDeviceId: string;
   clientRecordedAt: string; // ISO — when the user submitted the survey
@@ -462,7 +463,6 @@ export async function saveSurvey(
     synced: false,
   };
   await db.put("surveys", survey);
-  await setConfig("lastSurveyDate", now);
   requestBackgroundSync();
   return survey;
 }
@@ -483,18 +483,45 @@ export async function markSurveySynced(id: string) {
   }
 }
 
+export interface SurveyStatus {
+  launchedAt: string | null;
+  everAnswered: boolean;
+  answeredSinceLaunch: boolean;
+}
+
+const SURVEY_STATUS_KEY = "surveyStatus";
+
+export async function getCachedSurveyStatus(): Promise<SurveyStatus | null> {
+  const raw = await getConfig(SURVEY_STATUS_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as SurveyStatus;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A survey is pending when the student has never answered one (first visit)
+ * or when an admin "launched" a campaign the student hasn't answered since.
+ * The server-computed status is cached on each sync so this also works
+ * offline; local unsynced surveys are taken into account as well.
+ */
 export async function shouldShowSurvey(): Promise<boolean> {
   const db = await getDB();
   const allSurveys = await db.getAll("surveys");
-  if (allSurveys.length === 0) return true;
+  const status = await getCachedSurveyStatus();
 
-  const lastDate = await getConfig("lastSurveyDate");
-  if (!lastDate) return true;
+  const everAnswered = allSurveys.length > 0 || (status?.everAnswered ?? false);
+  if (!everAnswered) return true;
 
-  const daysSinceLast = Math.floor(
-    (Date.now() - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24)
+  if (!status?.launchedAt) return false;
+
+  const launched = new Date(status.launchedAt).getTime();
+  const answeredLocally = allSurveys.some(
+    (s) => new Date(s.clientRecordedAt).getTime() >= launched
   );
-  return daysSinceLast >= 30;
+  return !(answeredLocally || status.answeredSinceLaunch);
 }
 
 // ── Config ──
@@ -536,6 +563,20 @@ async function applyServerExitTime(
   record.exitTime = exitTimeIso;
   record.synced = true;
   await db.put("records", record);
+}
+
+/**
+ * RN-04: the server rejected this record (entry outside the logical window);
+ * drop it locally along with any survey that references it, since those can
+ * never sync successfully.
+ */
+async function discardRecord(id: string): Promise<void> {
+  const db = await getDB();
+  await db.delete("records", id);
+  const surveys = await db.getAll("surveys");
+  for (const s of surveys) {
+    if (s.accessRecordId === id) await db.delete("surveys", s.id);
+  }
 }
 
 function requestBackgroundSync() {
@@ -602,11 +643,18 @@ export async function syncWithServer(): Promise<{
 
   const result = await res.json();
 
+  if (result.surveyStatus) {
+    await setConfig(SURVEY_STATUS_KEY, JSON.stringify(result.surveyStatus));
+  }
+
   if (student && !student.synced && result.studentSynced) {
     await markStudentSynced(student.numeroControl);
   }
   for (const id of result.syncedRecordIds ?? []) {
     await markRecordSynced(id);
+  }
+  for (const id of result.discardedRecordIds ?? []) {
+    await discardRecord(id);
   }
   for (const id of result.syncedSurveyIds ?? []) {
     await markSurveySynced(id);

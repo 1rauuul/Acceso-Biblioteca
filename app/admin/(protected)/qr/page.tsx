@@ -192,7 +192,7 @@ export default function QrPage() {
         {/* Printable Card */}
         <div className="flex flex-col items-center gap-4 rounded-2xl border border-border bg-white p-8 text-center shadow-sm print:border-0 print:shadow-none">
           <h3 className="text-2xl font-bold text-slate-900">
-            Biblioteca Escolar
+            Centro de Información
           </h3>
           <p className="max-w-md text-sm text-slate-600">
             {qrType === "access"

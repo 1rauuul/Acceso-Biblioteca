@@ -22,6 +22,8 @@ import {
   syncWithServer,
   type StudentData,
 } from "@/lib/idb";
+import { isWithinServiceHours } from "@/lib/datetime";
+import { LIBRARY_OPEN_HOUR, LIBRARY_CLOSE_HOUR } from "@/lib/constants";
 
 export default function EntradaPage() {
   const router = useRouter();
@@ -31,6 +33,7 @@ export default function EntradaPage() {
   const [loading, setLoading] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [showClosedNotice, setShowClosedNotice] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -66,6 +69,12 @@ export default function EntradaPage() {
 
   // Execute entry and redirect to /salida
   const executeEntry = useCallback(async () => {
+    // RN-01: check-ins outside the service window (07:00–18:00 MX) are
+    // rejected with a notice; no local record is created.
+    if (!isWithinServiceHours()) {
+      setShowClosedNotice(true);
+      return;
+    }
     setLoading(true);
     try {
       await createEntry();
@@ -233,6 +242,40 @@ export default function EntradaPage() {
         onClose={() => setIsScannerOpen(false)}
         onScanSuccess={handleQrSuccess}
       />
+
+      {/* RN-01: outside service hours notice */}
+      {showClosedNotice && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="closed-notice-title"
+          onClick={() => setShowClosedNotice(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl border border-border/80 bg-card p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="closed-notice-title"
+              className="text-lg font-bold text-foreground"
+            >
+              No está en horario de atención
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              La biblioteca abre de {LIBRARY_OPEN_HOUR}:00 a {LIBRARY_CLOSE_HOUR}:00.
+              Intenta de nuevo dentro de ese horario.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowClosedNotice(false)}
+              className="mt-5 flex h-11 w-full cursor-pointer items-center justify-center rounded-xl bg-primary px-4 font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90 active:scale-95"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
     </PageWrapper>
   );
 }

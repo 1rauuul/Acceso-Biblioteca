@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Users, Clock, TrendingUp, BarChart3 } from "lucide-react";
 import {
   BarChart,
@@ -48,23 +48,28 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchData = useCallback(async () => {
-    try {
-      const res = await fetch("/api/dashboard");
-      if (res.ok) {
-        setData(await res.json());
-      }
-    } catch {
-      // Silently fail, keep stale data
-    }
-    setLoading(false);
-  }, []);
-
   useEffect(() => {
+    let cancelled = false;
+
+    async function fetchData() {
+      try {
+        const res = await fetch("/api/dashboard");
+        if (res.ok && !cancelled) {
+          setData(await res.json());
+        }
+      } catch {
+        // Silently fail, keep stale data
+      }
+      if (!cancelled) setLoading(false);
+    }
+
     fetchData();
     const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   if (loading && !data) {
     return (

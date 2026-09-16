@@ -15,6 +15,10 @@ export const CARRERAS = [
 export const SEMESTRES = Array.from({ length: 12 }, (_, i) => i + 1);
 
 export const LIBRARY_CLOSE_HOUR = 18; // 6 PM
+export const LIBRARY_OPEN_HOUR = 7; // 7 AM
+export const LIBRARY_MAX_SESSION_MINUTES = 180; // RN-03: 3 horas
+export const LOGIN_BUFFER_OPEN_MINUTES = 5; // RN-04: login aceptado desde 06:55
+export const LOGIN_BUFFER_CLOSE_MINUTES = 3; // RN-04: login aceptado hasta 18:03
 
 export const LIBRARY_QR_ACCESS_TOKEN = "BIBLIOTECA_ACCESO";
 export const VALID_QR_TOKENS = [

@@ -32,10 +32,6 @@ export const SURVEY_QUESTIONS = [
     key: "amabilidadAtencion",
     label: "Me atienden amablemente cuando solicito apoyo",
   },
-  {
-    key: "relacionAtenta",
-    label: "Mantienen una relación atenta durante mi estancia",
-  },
 ] as const;
 
 export type SurveyQuestionKey = (typeof SURVEY_QUESTIONS)[number]["key"];

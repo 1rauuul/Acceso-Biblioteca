@@ -126,6 +126,14 @@ model SurveyResponse {
   @@map("survey_responses")
 }
 
+model SurveyLaunch {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  launchedAt DateTime @default(now()) @map("launched_at") @db.Timestamptz(6)
+
+  @@index([launchedAt(sort: Desc)])
+  @@map("survey_launches")
+}
+
 model AdminUser {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email        String   @unique

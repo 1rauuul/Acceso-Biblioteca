@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isWithinLoginWindow } from "@/lib/datetime";
 
 const CONTROL_NUMBER_RE = /^\d{8}$/;
 const UUID_RE =
@@ -15,6 +16,15 @@ function normalizeString(str: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    // RN-04: discard login attempts outside the logical window
+    // (06:55–18:03 Mexico) before touching the database.
+    if (!isWithinLoginWindow()) {
+      return NextResponse.json(
+        { error: "No está en horario de atención" },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { numeroControl, apellidoPaterno, deviceId } = body;
 

@@ -8,6 +8,14 @@
  * (cuyos servidores están en UTC).
  */
 
+import {
+  LIBRARY_CLOSE_HOUR,
+  LIBRARY_MAX_SESSION_MINUTES,
+  LIBRARY_OPEN_HOUR,
+  LOGIN_BUFFER_CLOSE_MINUTES,
+  LOGIN_BUFFER_OPEN_MINUTES,
+} from "./constants";
+
 export const LIBRARY_TIMEZONE = "America/Mexico_City";
 
 const MX_OFFSET_HOURS = 6;
@@ -15,6 +23,34 @@ const MX_OFFSET_HOURS = 6;
 /** Returns the Mexico-local hour (0-23) of a UTC Date. */
 export function mxHour(utcDate: Date): number {
   return (utcDate.getUTCHours() - MX_OFFSET_HOURS + 24) % 24;
+}
+
+/** Returns the Mexico-local wall-clock minutes since midnight (0-1439). */
+export function mxMinutesOfDay(utcDate: Date): number {
+  return mxHour(utcDate) * 60 + utcDate.getUTCMinutes();
+}
+
+/**
+ * RN-01: whether a UTC instant falls inside the service window
+ * (07:00–18:00 Mexico-local, inclusive).
+ */
+export function isWithinServiceHours(utcDate: Date = new Date()): boolean {
+  const minutes = mxMinutesOfDay(utcDate);
+  return (
+    minutes >= LIBRARY_OPEN_HOUR * 60 && minutes <= LIBRARY_CLOSE_HOUR * 60
+  );
+}
+
+/**
+ * RN-04: whether a UTC instant falls inside the logical login window
+ * (06:55–18:03 Mexico-local, inclusive).
+ */
+export function isWithinLoginWindow(utcDate: Date = new Date()): boolean {
+  const minutes = mxMinutesOfDay(utcDate);
+  return (
+    minutes >= LIBRARY_OPEN_HOUR * 60 - LOGIN_BUFFER_OPEN_MINUTES &&
+    minutes <= LIBRARY_CLOSE_HOUR * 60 + LOGIN_BUFFER_CLOSE_MINUTES
+  );
 }
 
 /**
@@ -73,6 +109,24 @@ export function mxTodayCloseUtc(
     0,
     0
   );
+}
+
+/**
+ * RN-02 + RN-03: the UTC instant at which a session that opened at
+ * `entryTime` must be sealed — the earlier of `entryTime + 3h` and today's
+ * closing time (18:00 Mexico-local). Used by /salida's reconcile loop and
+ * mirrored server-side by the sync route and the auto-close cron.
+ */
+export function sessionDeadlineUtc(
+  entryTime: Date | string,
+  reference: Date = new Date()
+): Date {
+  const entry = typeof entryTime === "string" ? new Date(entryTime) : entryTime;
+  const maxDuration = new Date(
+    entry.getTime() + LIBRARY_MAX_SESSION_MINUTES * 60 * 1000
+  );
+  const close = mxTodayCloseUtc(reference, LIBRARY_CLOSE_HOUR);
+  return maxDuration < close ? maxDuration : close;
 }
 
 const mxDateFmt = new Intl.DateTimeFormat("es-MX", {

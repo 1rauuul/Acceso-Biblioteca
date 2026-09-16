@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { PageWrapper } from "@/components/page-wrapper";
 import { StarRating } from "@/components/star-rating";
-import { RatingSlider } from "@/components/rating-slider";
+import { RatingChoice } from "@/components/rating-choice";
 import { Confetti } from "@/components/confetti";
 import {
   getStudent,
@@ -16,21 +16,53 @@ import {
   getLastClosedRecord,
 } from "@/lib/idb";
 
+const QUESTIONS = [
+  { key: "limpieza", label: "Limpieza del espacio" },
+  { key: "mesas", label: "Disponibilidad de mesas" },
+  { key: "silencio", label: "Silencio y ambiente" },
+  { key: "horarioConsulta", label: "El horario de consulta es adecuado" },
+  {
+    key: "apoyoAsignaturas",
+    label: "La información disponible me apoya en mis asignaturas",
+  },
+  {
+    key: "disponibilidadBibliografia",
+    label: "Encuentro al menos un ejemplar de la bibliografía solicitada",
+  },
+  {
+    key: "bibliografiaActualizada",
+    label: "La bibliografía disponible está actualizada",
+  },
+  {
+    key: "atencionBusqueda",
+    label: "Recibo atención adecuada al buscar un libro",
+  },
+  {
+    key: "orientacionEquivalentes",
+    label: "Me orientan para encontrar libros equivalentes",
+  },
+  {
+    key: "disposicionServicio",
+    label: "Tienen disposición para atenderme cuando solicito un servicio",
+  },
+  {
+    key: "amabilidadAtencion",
+    label: "Me atienden amablemente cuando solicito apoyo",
+  },
+] as const;
+
+type QuestionKey = (typeof QUESTIONS)[number]["key"];
+
+const INITIAL_ANSWERS: Record<QuestionKey, number> = Object.fromEntries(
+  QUESTIONS.map((q) => [q.key, 0])
+) as Record<QuestionKey, number>;
+
 export default function EncuestaPage() {
   const router = useRouter();
   const [stars, setStars] = useState(0);
-  const [limpieza, setLimpieza] = useState(3);
-  const [mesas, setMesas] = useState(3);
-  const [silencio, setSilencio] = useState(3);
-  const [horarioConsulta, setHorarioConsulta] = useState(3);
-  const [apoyoAsignaturas, setApoyoAsignaturas] = useState(3);
-  const [disponibilidadBibliografia, setDisponibilidadBibliografia] = useState(3);
-  const [bibliografiaActualizada, setBibliografiaActualizada] = useState(3);
-  const [atencionBusqueda, setAtencionBusqueda] = useState(3);
-  const [orientacionEquivalentes, setOrientacionEquivalentes] = useState(3);
-  const [disposicionServicio, setDisposicionServicio] = useState(3);
-  const [amabilidadAtencion, setAmabilidadAtencion] = useState(3);
-  const [relacionAtenta, setRelacionAtenta] = useState(3);
+  const [answers, setAnswers] = useState<Record<QuestionKey, number>>(
+    INITIAL_ANSWERS
+  );
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -55,8 +87,16 @@ export default function EncuestaPage() {
     init();
   }, [router]);
 
+  const allAnswered =
+    stars > 0 && QUESTIONS.every((q) => answers[q.key] > 0);
+
   const handleSubmit = async () => {
     setError("");
+
+    if (!allAnswered) {
+      setError("Responde todas las preguntas antes de enviar.");
+      return;
+    }
 
     if (!numeroControl || !lastRecordId) {
       setError(
@@ -71,19 +111,8 @@ export default function EncuestaPage() {
       await saveSurvey({
         numeroControl,
         accessRecordId: lastRecordId,
-        stars: stars || 3,
-        limpieza,
-        mesas,
-        silencio,
-        horarioConsulta,
-        apoyoAsignaturas,
-        disponibilidadBibliografia,
-        bibliografiaActualizada,
-        atencionBusqueda,
-        orientacionEquivalentes,
-        disposicionServicio,
-        amabilidadAtencion,
-        relacionAtenta,
+        stars,
+        ...answers,
         comment: comment.trim(),
       });
 
@@ -102,10 +131,6 @@ export default function EncuestaPage() {
       setError("No se pudo guardar la encuesta. Inténtalo de nuevo.");
       setLoading(false);
     }
-  };
-
-  const handleSkip = () => {
-    router.push("/entrada");
   };
 
   return (
@@ -130,79 +155,18 @@ export default function EncuestaPage() {
           label="¿Cómo fue tu experiencia?"
         />
 
-        <div className="flex flex-col gap-6">
-          <RatingSlider
-            label="Limpieza del espacio"
-            emoji="📚"
-            value={limpieza}
-            onChange={setLimpieza}
-          />
-          <RatingSlider
-            label="Disponibilidad de mesas"
-            emoji="💺"
-            value={mesas}
-            onChange={setMesas}
-          />
-          <RatingSlider
-            label="Silencio y ambiente"
-            emoji="🤫"
-            value={silencio}
-            onChange={setSilencio}
-          />
-          <RatingSlider
-            label="El horario de consulta es adecuado"
-            emoji="🕒"
-            value={horarioConsulta}
-            onChange={setHorarioConsulta}
-          />
-          <RatingSlider
-            label="La información disponible me apoya en mis asignaturas"
-            emoji="📖"
-            value={apoyoAsignaturas}
-            onChange={setApoyoAsignaturas}
-          />
-          <RatingSlider
-            label="Siempre encuentro al menos un ejemplar de la bibliografía solicitada"
-            emoji="📚"
-            value={disponibilidadBibliografia}
-            onChange={setDisponibilidadBibliografia}
-          />
-          <RatingSlider
-            label="La bibliografía disponible está actualizada"
-            emoji="🗂️"
-            value={bibliografiaActualizada}
-            onChange={setBibliografiaActualizada}
-          />
-          <RatingSlider
-            label="Recibo atención adecuada al buscar un libro"
-            emoji="🔎"
-            value={atencionBusqueda}
-            onChange={setAtencionBusqueda}
-          />
-          <RatingSlider
-            label="Me orientan para encontrar libros equivalentes"
-            emoji="🧭"
-            value={orientacionEquivalentes}
-            onChange={setOrientacionEquivalentes}
-          />
-          <RatingSlider
-            label="Tienen disposición para atenderme cuando solicito un servicio"
-            emoji="🙋"
-            value={disposicionServicio}
-            onChange={setDisposicionServicio}
-          />
-          <RatingSlider
-            label="Me atienden amablemente cuando solicito apoyo"
-            emoji="🙂"
-            value={amabilidadAtencion}
-            onChange={setAmabilidadAtencion}
-          />
-          <RatingSlider
-            label="Mantienen una relación atenta conmigo durante mi estancia"
-            emoji="🤝"
-            value={relacionAtenta}
-            onChange={setRelacionAtenta}
-          />
+        <div className="flex flex-col gap-7">
+          {QUESTIONS.map((question) => (
+            <RatingChoice
+              key={question.key}
+              name={question.key}
+              label={question.label}
+              value={answers[question.key]}
+              onChange={(v) =>
+                setAnswers((prev) => ({ ...prev, [question.key]: v }))
+              }
+            />
+          ))}
         </div>
 
         <div className="flex flex-col gap-2">
@@ -234,7 +198,7 @@ export default function EncuestaPage() {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={loading || submitted}
+          disabled={loading || submitted || !allAnswered}
           aria-busy={loading}
           className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-success p-4 text-xl font-bold text-success-foreground shadow-lg transition-all duration-300 hover:bg-success/90 active:scale-95 focus-visible:ring-4 focus-visible:ring-success/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60"
         >
@@ -253,18 +217,9 @@ export default function EncuestaPage() {
           )}
         </button>
 
-        {!submitted && (
-          <button
-            type="button"
-            onClick={handleSkip}
-            className="text-sm text-muted-foreground underline-offset-2 hover:underline"
-          >
-            Omitir encuesta
-          </button>
-        )}
-
         <p className="text-center text-xs text-muted-foreground">
-          Tu opinión ayuda a mejorar el servicio
+          Responde todas las preguntas para continuar. Tu opinión ayuda a
+          mejorar el servicio
         </p>
       </div>
     </PageWrapper>

@@ -9,7 +9,7 @@ Stack: **Next.js 16 · React 19 · Prisma 7 · Supabase Postgres · Serwist (PWA
 ## Características
 
 - **Registro offline** de entradas/salidas en IndexedDB; se sincronizan al backend cuando hay red (Background Sync API).
-- **Encuesta opcional** al salir, máximo una vez cada 30 días por dispositivo.
+- **Encuesta obligatoria** al salir: en la primera visita y cada vez que el admin la lanza desde el panel.
 - **Panel admin** protegido con JWT (cookie httpOnly) y Bcrypt, con dashboard, pantallas de asistencia y encuestas filtrables, y exportación a Excel/PDF.
 - **Cron diario de auto-cierre** (`/api/cron/auto-close`) que cierra sesiones olvidadas estimando duración con el promedio de las últimas visitas del estudiante.
 - **QR de instalación** generable desde el panel para imprimir y pegar en la entrada.
@@ -78,6 +78,7 @@ app/
     sync/               -> Endpoint de sincronización IndexedDB <-> Postgres
     auth/               -> login / logout / change-password / me
     dashboard/, reports/, surveys/, export/ -> Datos para el panel
+    surveys/launch/, surveys/status/ -> Lanzar campaña de encuestas
     cron/auto-close/    -> Cron diario protegido por CRON_SECRET
   sw.ts, serwist.ts     -> Service worker (Serwist)
 components/             -> UI compartida (admin shell, header, botones, etc.)

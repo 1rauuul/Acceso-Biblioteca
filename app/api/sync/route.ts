@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isWithinLoginWindow } from "@/lib/datetime";
+import { LIBRARY_MAX_SESSION_MINUTES } from "@/lib/constants";
 import type { Carrera, Sexo } from "@/lib/generated/prisma/enums";
 
 type Platform = "ios" | "android" | "desktop" | "unknown";
@@ -178,12 +180,20 @@ export async function POST(request: NextRequest) {
     //    landed (e.g. from a different device), so we never overwrite newer
     //    timestamps.
     //
+    //    RN-04: records whose entryTime falls outside the logical window
+    //    (06:55–18:03 Mexico) are never inserted; their ids are returned as
+    //    `discardedRecordIds` so the client can drop them locally.
+    //
+    //    RN-03: exit_time is capped at entry_time + 3h. Closures are marked
+    //    `auto_closed` so the cap is authoritative over later client pushes.
+    //
     //    The additional `auto_closed = false` guard is critical: once the
     //    server-side cron closes a session, that decision is authoritative.
     //    A client coming online later (offline during the close, then
     //    registers a `createExit()`) must NOT be able to rewrite the
     //    auto-close timestamp. `duration_minutes` is a GENERATED column and
     //    must not appear in INSERT/UPDATE.
+    const discardedRecordIds: string[] = [];
     if (body.records?.length) {
       for (const record of body.records) {
         if (
@@ -192,6 +202,24 @@ export async function POST(request: NextRequest) {
           !isControlNumber(record.numeroControl)
         ) {
           continue;
+        }
+        const entryDate = new Date(record.entryTime);
+        if (!isWithinLoginWindow(entryDate)) {
+          discardedRecordIds.push(record.id);
+          continue;
+        }
+        const deadline = new Date(
+          entryDate.getTime() + LIBRARY_MAX_SESSION_MINUTES * 60 * 1000
+        );
+        const clientExit = record.exitTime ? new Date(record.exitTime) : null;
+        let exitTime = clientExit;
+        let autoClosed = false;
+        if (clientExit && clientExit > deadline) {
+          exitTime = deadline;
+          autoClosed = true;
+        } else if (!clientExit && new Date() > deadline) {
+          exitTime = deadline;
+          autoClosed = true;
         }
         try {
           await prisma.$executeRaw`
@@ -208,9 +236,9 @@ export async function POST(request: NextRequest) {
             VALUES (
               ${record.id}::uuid,
               ${record.numeroControl},
-              ${new Date(record.entryTime)},
-              ${record.exitTime ? new Date(record.exitTime) : null},
-              false,
+              ${entryDate},
+              ${exitTime},
+              ${autoClosed},
               ${record.sourceDeviceId}::uuid,
               ${new Date(record.clientRecordedAt)},
               now()
@@ -231,6 +259,9 @@ export async function POST(request: NextRequest) {
 
     // 4) Surveys: idempotent upsert. The (access_record_id) uniqueness is the
     //    real conflict target; `id` uniqueness lets the same client retry.
+    //    Surveys pointing at discarded records are skipped (the client drops
+    //    them when it processes `discardedRecordIds`).
+    const discardedSet = new Set(discardedRecordIds);
     if (body.surveys?.length) {
       for (const survey of body.surveys) {
         if (
@@ -238,6 +269,7 @@ export async function POST(request: NextRequest) {
           !isUuid(survey.accessRecordId) ||
           !isUuid(survey.sourceDeviceId) ||
           !isControlNumber(survey.numeroControl) ||
+          discardedSet.has(survey.accessRecordId) ||
           ![
             survey.horarioConsulta,
             survey.apoyoAsignaturas,
@@ -309,7 +341,61 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 5) Reverse sync: return the authoritative server state for every UUID
+    // 5) Survey campaign status for the student behind this sync. The PWA
+    //    caches it to decide (even offline) whether a survey is pending:
+    //    first-ever visit, or a launch that has not been answered yet.
+    let surveyStatus: {
+      launchedAt: string | null;
+      everAnswered: boolean;
+      answeredSinceLaunch: boolean;
+    } | null = null;
+    let surveyNumeroControl: string | null =
+      body.student && isControlNumber(body.student.numeroControl)
+        ? body.student.numeroControl
+        : null;
+    if (!surveyNumeroControl) {
+      surveyNumeroControl =
+        body.records?.find((r) => isControlNumber(r.numeroControl))
+          ?.numeroControl ??
+        body.surveys?.find((s) => isControlNumber(s.numeroControl))
+          ?.numeroControl ??
+        null;
+    }
+    if (
+      !surveyNumeroControl &&
+      body.device &&
+      isUuid(body.device.id)
+    ) {
+      const owner = await prisma.student.findFirst({
+        where: { currentDeviceId: body.device.id },
+        select: { numeroControl: true },
+      });
+      surveyNumeroControl = owner?.numeroControl ?? null;
+    }
+    if (surveyNumeroControl) {
+      const launch = await prisma.surveyLaunch.findFirst({
+        orderBy: { launchedAt: "desc" },
+        select: { launchedAt: true },
+      });
+      const [totalResponses, responsesSinceLaunch] = await Promise.all([
+        prisma.surveyResponse.count({ where: { numeroControl: surveyNumeroControl } }),
+        launch
+          ? prisma.surveyResponse.count({
+              where: {
+                numeroControl: surveyNumeroControl,
+                clientRecordedAt: { gte: launch.launchedAt },
+              },
+            })
+          : Promise.resolve(0),
+      ]);
+      surveyStatus = {
+        launchedAt: launch?.launchedAt.toISOString() ?? null,
+        everAnswered: totalResponses > 0,
+        answeredSinceLaunch: responsesSinceLaunch > 0,
+      };
+    }
+
+    // 6) Reverse sync: return the authoritative server state for every UUID
     //    the client asked about (its open sessions) plus everything it just
     //    pushed. This lets the PWA detect sessions auto-closed by the cron.
     const queryIds = Array.from(
@@ -341,8 +427,10 @@ export async function POST(request: NextRequest) {
       studentSynced,
       studentExists,
       syncedRecordIds,
+      discardedRecordIds,
       syncedSurveyIds,
       serverRecords,
+      surveyStatus,
     });
   } catch (error) {
     console.error("[api/sync] FAILED:", error);
