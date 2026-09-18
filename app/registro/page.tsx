@@ -343,7 +343,7 @@ export default function RegistroPage() {
                 id="loginNumeroControl"
                 inputMode="numeric"
                 className="pl-10"
-                placeholder="Ej: 22360962"
+                placeholder="Ej: 26360123"
                 value={loginForm.numeroControl}
                 maxLength={8}
                 onChange={(e) => {

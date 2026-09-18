@@ -18,6 +18,7 @@ Sistema de registro de entrada para estudiantes en una biblioteca universitaria 
 | Ventana lógica de aceptación de login | `06:55` – `18:03` |
 | Hora de cierre automático de sesiones | `18:03` |
 | Duración máxima de sesión | `3 horas` |
+| Duración mínima válida de sesión | `9 minutos` |
 
 ---
 
@@ -55,6 +56,14 @@ Sistema de registro de entrada para estudiantes en una biblioteca universitaria 
 - **Prioridad:** Alta.
 - **Notas:** evita ensuciar la base de datos con registros inválidos fuera de la ventana operativa. `/api/auth/student-login` responde `403` con *"No está en horario de atención"* antes de tocar la base de datos; `/api/sync` además descarta registros cuyo `entry_time` caiga fuera de la ventana (protección contra relojes de dispositivo desincronizados), devolviendo `discardedRecordIds` para que el cliente los elimine de IndexedDB.
 
+### RN-05 — Descarte de sesiones menores a 9 minutos
+
+- **Trigger:** intento de cierre o sincronización de una sesión.
+- **Condición:** `tiempo_transcurrido(sesión) < 9 minutos`.
+- **Acción:** eliminar el registro local y volver al flujo normal de entrada sin sincronizarlo. El servidor también descarta cualquier registro corto recibido por clientes antiguos o manipulados antes de ejecutar el `INSERT`.
+- **Prioridad:** Alta.
+- **Nota:** una duración exacta de `9 minutos` sí es válida.
+
 ---
 
 ## 4. Resumen de ventanas horarias (hora México)
@@ -77,6 +86,7 @@ Sistema de registro de entrada para estudiantes en una biblioteca universitaria 
 - RN-02: Vercel Cron (`3 0 * * *` UTC) + job `pg_cron` redundante como red de seguridad.
 - RN-03: reconcile cada 30 s en `/salida` + tope en `/api/sync` + tope en el cron de respaldo. No se usa un cron cada 5–10 min: los cierres en reposo se resuelven en la siguiente sincronización del dispositivo o en el cron diario, con el tope de 3 h garantizado al insertar.
 - RN-01 y RN-04 se validan en el mismo punto de entrada antes de tocar la base de datos (pop-up en `/entrada`; `403` en `student-login`; descarte en `sync`) para evitar registros inválidos.
+- RN-05 se filtra antes de la sincronización: `createExit()` elimina sesiones cerradas menores a 9 minutos y `/api/sync` solo envía sesiones abiertas con al menos 9 minutos o sesiones cerradas con duración válida.
 
 ---
 
@@ -88,4 +98,5 @@ Sistema de registro de entrada para estudiantes en una biblioteca universitaria 
 | RN-02 | `vercel.json`, `app/api/cron/auto-close/route.ts`, `prisma/migrations/20260915000200_business_hours_enforcement/migration.sql`, `app/salida/page.tsx` |
 | RN-03 | `app/salida/page.tsx` (`sessionDeadlineUtc`), `app/api/sync/route.ts`, `app/api/cron/auto-close/route.ts`, migración pg_cron |
 | RN-04 | `app/api/auth/student-login/route.ts`, `app/api/sync/route.ts`, `lib/idb.ts` (`discardedRecordIds`) |
+| RN-05 | `lib/datetime.ts` (`isSessionLongEnough`), `lib/idb.ts`, `app/salida/page.tsx`, `app/api/sync/route.ts` |
 | Constantes | `lib/constants.ts` (`LIBRARY_OPEN_HOUR`, `LIBRARY_CLOSE_HOUR`, `LIBRARY_MAX_SESSION_MINUTES`, buffers `06:55`/`18:03`) |

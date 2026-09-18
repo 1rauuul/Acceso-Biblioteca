@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isWithinLoginWindow } from "@/lib/datetime";
+import { isSessionLongEnough, isWithinLoginWindow } from "@/lib/datetime";
 import { LIBRARY_MAX_SESSION_MINUTES } from "@/lib/constants";
 import type { Carrera, Sexo } from "@/lib/generated/prisma/enums";
 
@@ -187,6 +187,9 @@ export async function POST(request: NextRequest) {
     //    RN-03: exit_time is capped at entry_time + 3h. Closures are marked
     //    `auto_closed` so the cap is authoritative over later client pushes.
     //
+    //    Sessions shorter than 9 minutes are discarded before the INSERT so
+    //    they cannot inflate server-side attendance metrics.
+    //
     //    The additional `auto_closed = false` guard is critical: once the
     //    server-side cron closes a session, that decision is authoritative.
     //    A client coming online later (offline during the close, then
@@ -208,10 +211,14 @@ export async function POST(request: NextRequest) {
           discardedRecordIds.push(record.id);
           continue;
         }
+        const clientExit = record.exitTime ? new Date(record.exitTime) : null;
+        if (!isSessionLongEnough(entryDate, clientExit)) {
+          discardedRecordIds.push(record.id);
+          continue;
+        }
         const deadline = new Date(
           entryDate.getTime() + LIBRARY_MAX_SESSION_MINUTES * 60 * 1000
         );
-        const clientExit = record.exitTime ? new Date(record.exitTime) : null;
         let exitTime = clientExit;
         let autoClosed = false;
         if (clientExit && clientExit > deadline) {

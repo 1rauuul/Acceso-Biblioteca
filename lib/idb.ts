@@ -1,4 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import { isSessionLongEnough } from "@/lib/datetime";
 
 export interface StudentData {
   numeroControl: string;
@@ -395,10 +396,19 @@ export async function createExit(
   if (!session) return undefined;
 
   const now = new Date().toISOString();
+  const exitTime = options.exitTime ?? now;
+
+  // Sessions shorter than the minimum are intentionally discarded locally;
+  // they must never be sent to the server or counted in reports.
+  if (!isSessionLongEnough(session.entryTime, exitTime)) {
+    await discardRecord(session.id);
+    return undefined;
+  }
+
   // Allow callers to seal the session with an explicit time (e.g. the
   // library's closing time when we're past close and the cron never ran).
   // Falls back to "now" for the normal manual check-out path.
-  session.exitTime = options.exitTime ?? now;
+  session.exitTime = exitTime;
   // The most recent client-side mutation wins on the server's conflict guard.
   session.clientRecordedAt = now;
   session.synced = false;
@@ -429,6 +439,23 @@ export async function getPendingRecords(): Promise<AccessRecordLocal[]> {
   // per device.
   const all = await db.getAll("records");
   return all.filter((r) => !r.synced);
+}
+
+async function getSyncableRecords(): Promise<AccessRecordLocal[]> {
+  const pending = await getPendingRecords();
+  const syncable: AccessRecordLocal[] = [];
+
+  for (const record of pending) {
+    if (isSessionLongEnough(record.entryTime, record.exitTime)) {
+      syncable.push(record);
+    } else if (record.exitTime) {
+      // Clean up invalid closed rows left by an older client version without
+      // ever sending them to the server.
+      await discardRecord(record.id);
+    }
+  }
+
+  return syncable;
 }
 
 export async function markRecordSynced(id: string) {
@@ -541,7 +568,7 @@ export async function setConfig(key: string, value: string) {
 
 export async function getAllSyncData() {
   const student = await getStudent();
-  const pendingRecords = await getPendingRecords();
+  const pendingRecords = await getSyncableRecords();
   const pendingSurveys = await getPendingSurveys();
   return { student, pendingRecords, pendingSurveys };
 }
@@ -565,11 +592,7 @@ async function applyServerExitTime(
   await db.put("records", record);
 }
 
-/**
- * RN-04: the server rejected this record (entry outside the logical window);
- * drop it locally along with any survey that references it, since those can
- * never sync successfully.
- */
+/** Drop a rejected or invalid record and any survey that references it. */
 async function discardRecord(id: string): Promise<void> {
   const db = await getDB();
   await db.delete("records", id);

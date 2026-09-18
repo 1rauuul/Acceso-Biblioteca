@@ -43,7 +43,7 @@ function useElapsedTime(entryIso: string | null) {
     const diff = Math.floor((now - new Date(entryIso).getTime()) / 60000);
     const hours = Math.floor(diff / 60);
     const minutes = diff % 60;
-    return hours > 0 ? `${hours}h ${minutes}min` : `${minutes}min`;
+    return hours > 0 ? `${hours}h ${minutes} min` : `${minutes} min`;
   }, [entryIso, now]);
 
   return { elapsed, entryDisplay };
@@ -124,7 +124,14 @@ export default function SalidaPage() {
   const handleSalir = useCallback(async () => {
     setLoading(true);
     try {
-      await createExit();
+      const closedSession = await createExit();
+
+      // A session under 9 minutes is discarded locally by createExit().
+      // Treat that as a normal flow and do not sync or open a survey for it.
+      if (!closedSession) {
+        router.push("/entrada");
+        return;
+      }
 
       if (navigator.onLine) {
         try {
@@ -154,14 +161,17 @@ export default function SalidaPage() {
         {entryTime && (
           <div
             className="flex flex-col items-center gap-1 text-center"
-            aria-label={`Dentro desde las ${entryDisplay}, ${elapsed}`}
+            aria-label={`Entas dentro desde ${entryDisplay}, ${elapsed}`}
           >
             <p className="text-lg text-muted-foreground">Dentro desde</p>
             <p className="text-4xl font-bold tabular-nums text-foreground">
               {entryDisplay}
             </p>
             <p className="mt-1 text-3xl font-semibold text-primary">
-              <span aria-hidden="true">⏱️</span> {elapsed}
+              <span className="inline-flex items-center gap-1.5">
+                <Clock className="size-6" aria-hidden="true" />
+                {elapsed}
+              </span>
             </p>
           </div>
         )}
@@ -182,7 +192,7 @@ export default function SalidaPage() {
           className="gap-1.5 border-muted-foreground/20 bg-muted px-3 py-1.5 text-xs text-muted-foreground"
         >
           <Clock className="size-3.5" aria-hidden="true" />
-          Biblioteca cierra {LIBRARY_CLOSE_HOUR}:00
+          El Centro de Información cierra a las {LIBRARY_CLOSE_HOUR}:00
         </Badge>
       </footer>
     </PageWrapper>

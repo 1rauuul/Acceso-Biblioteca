@@ -12,6 +12,7 @@ import {
   LIBRARY_CLOSE_HOUR,
   LIBRARY_MAX_SESSION_MINUTES,
   LIBRARY_OPEN_HOUR,
+  MIN_VALID_SESSION_MINUTES,
   LOGIN_BUFFER_CLOSE_MINUTES,
   LOGIN_BUFFER_OPEN_MINUTES,
 } from "./constants";
@@ -51,6 +52,22 @@ export function isWithinLoginWindow(utcDate: Date = new Date()): boolean {
     minutes >= LIBRARY_OPEN_HOUR * 60 - LOGIN_BUFFER_OPEN_MINUTES &&
     minutes <= LIBRARY_CLOSE_HOUR * 60 + LOGIN_BUFFER_CLOSE_MINUTES
   );
+}
+
+/** Returns whether a session is valid for synchronization (at least 9 min). */
+export function isSessionLongEnough(
+  entryTime: Date | string,
+  exitTime: Date | string | null,
+  reference: Date = new Date()
+): boolean {
+  const entry = typeof entryTime === "string" ? new Date(entryTime) : entryTime;
+  const end = exitTime
+    ? typeof exitTime === "string"
+      ? new Date(exitTime)
+      : exitTime
+    : reference;
+  const duration = end.getTime() - entry.getTime();
+  return Number.isFinite(duration) && duration >= MIN_VALID_SESSION_MINUTES * 60 * 1000;
 }
 
 /**
