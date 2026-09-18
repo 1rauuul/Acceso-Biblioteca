@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { Download, X } from "lucide-react";
 
@@ -12,6 +13,7 @@ type BeforeInstallPromptEvent = Event & {
 const DISMISS_KEY = "install-prompt-dismissed";
 
 export function InstallPrompt() {
+  const pathname = usePathname();
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(
     null
   );
@@ -83,7 +85,7 @@ export function InstallPrompt() {
     setDeferred(null);
   };
 
-  if (!open) return null;
+  if (!open || pathname.startsWith("/admin")) return null;
 
   return (
     <div
