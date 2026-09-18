@@ -384,7 +384,6 @@ export async function createEntry(): Promise<AccessRecordLocal> {
     synced: false,
   };
   await db.put("records", record);
-  requestBackgroundSync();
   return record;
 }
 
@@ -413,7 +412,6 @@ export async function createExit(
   session.clientRecordedAt = now;
   session.synced = false;
   await db.put("records", session);
-  requestBackgroundSync();
   return session;
 }
 
@@ -490,7 +488,6 @@ export async function saveSurvey(
     synced: false,
   };
   await db.put("surveys", survey);
-  requestBackgroundSync();
   return survey;
 }
 
@@ -599,20 +596,6 @@ async function discardRecord(id: string): Promise<void> {
   const surveys = await db.getAll("surveys");
   for (const s of surveys) {
     if (s.accessRecordId === id) await db.delete("surveys", s.id);
-  }
-}
-
-function requestBackgroundSync() {
-  if ("serviceWorker" in navigator && "SyncManager" in window) {
-    navigator.serviceWorker.ready
-      .then((reg) =>
-        (
-          reg as unknown as {
-            sync: { register: (tag: string) => Promise<void> };
-          }
-        ).sync.register("sync-records")
-      )
-      .catch(() => {});
   }
 }
 

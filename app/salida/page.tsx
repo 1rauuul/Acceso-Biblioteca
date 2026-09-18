@@ -56,6 +56,7 @@ export default function SalidaPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [entryTime, setEntryTime] = useState<string | null>(null);
+  const [greeting, setGreeting] = useState<string | null>(null);
   const minimumSyncSessionId = useRef<string | null>(null);
   const { elapsed, entryDisplay } = useElapsedTime(entryTime);
 
@@ -72,6 +73,9 @@ export default function SalidaPage() {
         if (!cancelled) router.replace("/registro");
         return true;
       }
+      setGreeting(
+        `¡${student.sexo === "F" ? "Bienvenida" : "Bienvenido"}, ${student.nombre}!`
+      );
 
       const now = new Date();
 
@@ -184,9 +188,9 @@ export default function SalidaPage() {
 
   return (
     <PageWrapper className="bg-gradient-to-b from-blue-50 to-indigo-100 dark:from-slate-900 dark:to-red-950/20">
-      <LibraryHeader subtitle="¡Buen trabajo!" />
+      <LibraryHeader subtitle={greeting ?? "¡Bienvenido!"} />
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-8">
+      <div className="flex flex-1 flex-col items-center justify-evenly gap-4 px-6 py-4">
         {entryTime && (
           <div
             className="flex flex-col items-center gap-1 text-center"

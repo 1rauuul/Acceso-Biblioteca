@@ -4,12 +4,13 @@ import { useEffect } from "react";
 import { syncWithServer } from "@/lib/idb";
 
 /**
- * Listens for:
- *   1. Background Sync pings from the Service Worker (postMessage).
- *   2. The window regaining network connectivity ("online" event).
- * In both cases we ask IndexedDB to push any pending records/surveys to
- * the server. Errors are swallowed: the data stays local and we will
- * retry on the next trigger.
+ * Pushes pending records/surveys to the server when:
+ *   1. The app mounts (covers data left over from an offline session).
+ *   2. The browser regains network connectivity ("online" event).
+ *   3. The app becomes visible again ("visibilitychange"), e.g. the user
+ *      switches back to the PWA after being offline.
+ * Errors are swallowed: the data stays local and we retry on the next
+ * trigger (plus the explicit syncs after entry/exit/survey/registro).
  */
 export function SyncListener() {
   useEffect(() => {
@@ -18,26 +19,18 @@ export function SyncListener() {
       syncWithServer().catch(() => {});
     }
 
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === "sync-records") {
-        trySync();
-      }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") trySync();
     };
 
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.addEventListener("message", handleMessage);
-    }
     window.addEventListener("online", trySync);
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
-    // Attempt an initial sync on mount in case we had pending data
-    // from a previous offline session.
     trySync();
 
     return () => {
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.removeEventListener("message", handleMessage);
-      }
       window.removeEventListener("online", trySync);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 
