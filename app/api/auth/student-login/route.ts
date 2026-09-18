@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isWithinLoginWindow } from "@/lib/datetime";
+import { LIBRARY_SCHEDULE_MESSAGE } from "@/lib/constants";
 
 const CONTROL_NUMBER_RE = /^\d{8}$/;
 const UUID_RE =
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     // (06:55–18:03 Mexico) before touching the database.
     if (!isWithinLoginWindow()) {
       return NextResponse.json(
-        { error: "No está en horario de atención" },
+        { error: LIBRARY_SCHEDULE_MESSAGE },
         { status: 403 }
       );
     }

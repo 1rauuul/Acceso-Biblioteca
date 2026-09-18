@@ -20,6 +20,8 @@ export const LIBRARY_MAX_SESSION_MINUTES = 180; // RN-03: 3 horas
 export const MIN_VALID_SESSION_MINUTES = 9;
 export const LOGIN_BUFFER_OPEN_MINUTES = 5; // RN-04: login aceptado desde 06:55
 export const LOGIN_BUFFER_CLOSE_MINUTES = 3; // RN-04: login aceptado hasta 18:03
+export const LIBRARY_SCHEDULE_MESSAGE =
+  "No está en horario de atención. La biblioteca opera de lunes a viernes.";
 
 export const LIBRARY_QR_ACCESS_TOKEN = "BIBLIOTECA_ACCESO";
 export const VALID_QR_TOKENS = [

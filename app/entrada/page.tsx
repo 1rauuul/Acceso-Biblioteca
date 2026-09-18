@@ -23,7 +23,11 @@ import {
   type StudentData,
 } from "@/lib/idb";
 import { isWithinServiceHours } from "@/lib/datetime";
-import { LIBRARY_OPEN_HOUR, LIBRARY_CLOSE_HOUR } from "@/lib/constants";
+import {
+  LIBRARY_CLOSE_HOUR,
+  LIBRARY_OPEN_HOUR,
+  LIBRARY_SCHEDULE_MESSAGE,
+} from "@/lib/constants";
 
 export default function EntradaPage() {
   const router = useRouter();
@@ -250,7 +254,7 @@ export default function EntradaPage() {
               id="closed-notice-title"
               className="text-lg font-bold text-foreground"
             >
-              No está en horario de atención
+              {LIBRARY_SCHEDULE_MESSAGE}
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
               La biblioteca abre de {LIBRARY_OPEN_HOUR}:00 a {LIBRARY_CLOSE_HOUR}:00.

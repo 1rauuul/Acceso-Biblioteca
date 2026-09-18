@@ -31,6 +31,18 @@ export function mxMinutesOfDay(utcDate: Date): number {
   return mxHour(utcDate) * 60 + utcDate.getUTCMinutes();
 }
 
+/** Returns the Mexico-local weekday (0 Sunday through 6 Saturday). */
+export function mxWeekday(utcDate: Date): number {
+  const mexicoLocal = new Date(utcDate.getTime() - MX_OFFSET_HOURS * 60 * 60 * 1000);
+  return mexicoLocal.getUTCDay();
+}
+
+/** The library operates Monday through Friday only. */
+export function isLibraryWeekday(utcDate: Date = new Date()): boolean {
+  const weekday = mxWeekday(utcDate);
+  return weekday >= 1 && weekday <= 5;
+}
+
 /**
  * RN-01: whether a UTC instant falls inside the service window
  * (07:00–18:00 Mexico-local, inclusive).
@@ -38,6 +50,7 @@ export function mxMinutesOfDay(utcDate: Date): number {
 export function isWithinServiceHours(utcDate: Date = new Date()): boolean {
   const minutes = mxMinutesOfDay(utcDate);
   return (
+    isLibraryWeekday(utcDate) &&
     minutes >= LIBRARY_OPEN_HOUR * 60 && minutes <= LIBRARY_CLOSE_HOUR * 60
   );
 }
@@ -49,6 +62,7 @@ export function isWithinServiceHours(utcDate: Date = new Date()): boolean {
 export function isWithinLoginWindow(utcDate: Date = new Date()): boolean {
   const minutes = mxMinutesOfDay(utcDate);
   return (
+    isLibraryWeekday(utcDate) &&
     minutes >= LIBRARY_OPEN_HOUR * 60 - LOGIN_BUFFER_OPEN_MINUTES &&
     minutes <= LIBRARY_CLOSE_HOUR * 60 + LOGIN_BUFFER_CLOSE_MINUTES
   );
