@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,10 @@ import {
   syncWithServer,
 } from "@/lib/idb";
 import { LIBRARY_CLOSE_HOUR } from "@/lib/constants";
-import { sessionDeadlineUtc } from "@/lib/datetime";
+import {
+  isOpenSessionReadyForSync,
+  sessionDeadlineUtc,
+} from "@/lib/datetime";
 
 function useElapsedTime(entryIso: string | null) {
   // `now` only advances via the interval tick below; `elapsed` and
@@ -53,6 +56,7 @@ export default function SalidaPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [entryTime, setEntryTime] = useState<string | null>(null);
+  const minimumSyncSessionId = useRef<string | null>(null);
   const { elapsed, entryDisplay } = useElapsedTime(entryTime);
 
   useEffect(() => {
@@ -74,10 +78,35 @@ export default function SalidaPage() {
       // If the session is at/past its deadline, try to pull the server's
       // state first (the cron may have already closed this session).
       const session = await getCurrentSession();
+      let synchronizedAtMinimum = false;
+
+      // New entries stay local until they have reached the 9-minute minimum.
+      // Once eligible, synchronize once so the dashboard can count the open
+      // session without ever receiving a short record.
+      if (
+        session &&
+        session.id !== minimumSyncSessionId.current &&
+        isOpenSessionReadyForSync(session.entryTime, session.synced, now) &&
+        navigator.onLine
+      ) {
+        try {
+          await syncWithServer();
+          minimumSyncSessionId.current = session.id;
+          synchronizedAtMinimum = true;
+        } catch {
+          // Retry on the next reconcile while the session remains unsynced.
+        }
+      }
+
       const deadline = session
         ? sessionDeadlineUtc(session.entryTime, now)
         : null;
-      if (deadline && now >= deadline && navigator.onLine) {
+      if (
+        !synchronizedAtMinimum &&
+        deadline &&
+        now >= deadline &&
+        navigator.onLine
+      ) {
         try {
           await syncWithServer();
         } catch {

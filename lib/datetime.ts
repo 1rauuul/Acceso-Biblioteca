@@ -70,6 +70,15 @@ export function isSessionLongEnough(
   return Number.isFinite(duration) && duration >= MIN_VALID_SESSION_MINUTES * 60 * 1000;
 }
 
+/** Returns whether an open local session should be sent to the server now. */
+export function isOpenSessionReadyForSync(
+  entryTime: Date | string,
+  synced: boolean,
+  reference: Date = new Date()
+): boolean {
+  return !synced && isSessionLongEnough(entryTime, null, reference);
+}
+
 /**
  * Returns the UTC `Date` for a wall-clock Mexico-local moment.
  * Example: `mxWallTimeToUtc(2026, 3, 20, 18, 0)` returns `2026-04-21T00:00:00Z`
