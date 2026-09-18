@@ -60,8 +60,6 @@ Ver [`.env.example`](./.env.example). Resumen:
 | `SEED_ADMIN_EMAIL` | Email del admin inicial que crea `prisma db seed`. |
 | `SEED_ADMIN_PASSWORD` | Contraseña del admin inicial (mín. 8 caracteres). |
 | `SEED_ADMIN_NAME` | Nombre a mostrar del admin (opcional, default "Administrador"). |
-| `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase (opcional hoy). |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Clave pública Supabase (opcional hoy). |
 
 ---
 
@@ -106,6 +104,6 @@ Ver [`DEPLOYMENT.md`](./DEPLOYMENT.md) para la guía paso a paso de Vercel + Sup
 | Script | Acción |
 |---|---|
 | `npm run dev` | Servidor de desarrollo. |
-| `npm run build` | Build de producción (Vercel ejecuta `prisma migrate deploy && next build`). |
+| `npm run build` | Build de producción (Vercel ejecuta `prisma generate && prisma migrate deploy && next build`). |
 | `npm start` | Servir el build. |
 | `npm run lint` | ESLint. |

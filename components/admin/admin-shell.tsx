@@ -61,7 +61,7 @@ export function AdminShell({ children, userName }: AdminShellProps) {
         <div className="flex items-center gap-3 border-b border-border px-4 py-5">
           <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
               <Image
-                src="/logo-itt.jpg"
+                src="/logo-itt.png"
                 alt=""
                 width={36}
                 height={36}

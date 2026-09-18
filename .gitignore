@@ -49,6 +49,13 @@ public/swe-worker*
 # env example (se mantiene en el repo como documentación)
 !.env.example
 
+# local agent tooling and review artifacts
+/.agents/
+/SKILL.md
+/skills-lock.json
+/repomix-output.xml
+/REPOMIX_REVIEW.md
+
 # Editor
 .vscode/settings.json
 .idea/

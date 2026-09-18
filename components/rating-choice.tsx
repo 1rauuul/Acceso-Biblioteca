@@ -17,7 +17,7 @@ export function RatingChoice({
 }: RatingChoiceProps) {
   return (
     <fieldset className="flex flex-col gap-1">
-      <legend className="mb-2 text-sm font-medium text-foreground">
+      <legend className="mb-2 text-base font-medium text-foreground">
         {label}
       </legend>
       <div className="flex items-center justify-between px-2">
@@ -30,7 +30,7 @@ export function RatingChoice({
             >
               <span
                 className={cn(
-                  "text-sm tabular-nums transition-colors",
+                  "text-base tabular-nums transition-colors",
                   checked
                     ? "font-bold text-primary"
                     : "text-muted-foreground"

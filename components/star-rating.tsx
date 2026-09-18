@@ -31,7 +31,7 @@ export function StarRating({ value, onChange, label }: StarRatingProps) {
   return (
     <div className="flex flex-col items-center gap-2">
       {label && (
-        <span className="text-sm font-medium text-muted-foreground">
+        <span className="text-base font-medium text-muted-foreground">
           {label}
         </span>
       )}

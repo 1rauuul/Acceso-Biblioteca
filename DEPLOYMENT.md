@@ -15,7 +15,7 @@ Guía paso a paso para desplegar la PWA de la Biblioteca Escolar en Vercel con b
 ## 2. Variables de entorno
 
 En el dashboard de Vercel: **Project → Settings → Environment Variables**.
-Copia las cinco variables abajo. Usa los mismos valores en los tres entornos (`Production`, `Preview`, `Development`) salvo que indique lo contrario.
+Copia las variables de la tabla. Usa los mismos valores en los tres entornos (`Production`, `Preview`, `Development`) salvo que indique lo contrario.
 
 | Variable | Valor | Notas |
 |---|---|---|
@@ -23,8 +23,9 @@ Copia las cinco variables abajo. Usa los mismos valores en los tres entornos (`P
 | `DIRECT_URL` | `postgresql://postgres.<ref>:<PASSWORD>@aws-1-<region>.pooler.supabase.com:5432/postgres` | Conexión directa, puerto 5432. Solo se usa durante `prisma migrate deploy` en el build. |
 | `JWT_SECRET` | *(48 bytes aleatorios, base64url)* | Ver "Generar secretos" más abajo. **No uses el mismo de tu `.env` local.** |
 | `CRON_SECRET` | *(48 bytes aleatorios, base64url)* | Igual que arriba. Vercel enviará este valor automáticamente como `Authorization: Bearer <CRON_SECRET>` a `/api/cron/auto-close`. |
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://<ref>.supabase.co` | Opcional hoy (no se usa en el código), pero evita warnings. |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...` | Opcional. |
+| `SEED_ADMIN_EMAIL` | Email del administrador inicial | Necesaria solo al ejecutar `prisma db seed`. |
+| `SEED_ADMIN_PASSWORD` | Contraseña del administrador inicial | Necesaria solo al ejecutar `prisma db seed`; mínimo 8 caracteres. |
+| `SEED_ADMIN_NAME` | Nombre del administrador inicial | Opcional; usa `Administrador` por defecto. |
 
 ### Generar secretos
 
@@ -42,15 +43,15 @@ El archivo [`vercel.json`](./vercel.json) ya define:
 
 ```json
 {
-  "buildCommand": "prisma migrate deploy && next build",
+  "buildCommand": "prisma generate && prisma migrate deploy && next build",
   "crons": [
-    { "path": "/api/cron/auto-close", "schedule": "5 0 * * *" }
+    { "path": "/api/cron/auto-close", "schedule": "3 0 * * *" }
   ]
 }
 ```
 
 - Esto aplica automáticamente las migraciones pendientes antes de cada build de producción.
-- El cron corre diariamente a las **00:05 UTC = 18:05 hora México (UTC-6)**, cerrando sesiones olvidadas.
+- El cron corre diariamente a las **00:03 UTC = 18:03 hora México (UTC-6)**, cerrando sesiones olvidadas.
 
 Si tu biblioteca cambia de zona horaria o de hora de cierre, ajusta:
 
@@ -67,7 +68,7 @@ Si tu biblioteca cambia de zona horaria o de hora de cierre, ajusta:
 4. Agrega las variables de entorno del paso 2.
 5. Click en **Deploy**.
 
-Vercel correrá `prisma migrate deploy && next build`. Si las tablas ya existen en Supabase (por ejemplo porque corriste `migrate dev` localmente), el paso de migrate simplemente marcará las migraciones como aplicadas y continuará.
+Vercel correrá `prisma generate && prisma migrate deploy && next build`. Si las tablas ya existen en Supabase (por ejemplo porque corriste `migrate dev` localmente), el paso de migrate simplemente marcará las migraciones como aplicadas y continuará.
 
 ---
 
@@ -75,8 +76,8 @@ Vercel correrá `prisma migrate deploy && next build`. Si las tablas ya existen 
 
 ### Cambiar la contraseña del admin
 1. Entra a `https://<tu-dominio>.vercel.app/admin/login`.
-2. Usuario inicial (del seed): `admin@biblioteca.edu` / `admin123`.
-3. Ir a **Mi cuenta** → cambiar contraseña.
+2. Usa el email y la contraseña definidos en `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` al ejecutar el seed.
+3. Ir a **Mi cuenta** → cambiar la contraseña antes de exponer la aplicación.
 
 ### Imprimir el QR de instalación
 1. En el panel admin, ir a **QR Instalación**.
@@ -223,4 +224,3 @@ Si alguna validación falla tras `migration_C`:
   ```sql
   SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'library-auto-close';
   ```
-

@@ -172,7 +172,7 @@ export default function EncuestaPage() {
         <div className="flex flex-col gap-2">
           <label
             htmlFor="feedback-comment"
-            className="text-sm font-medium text-foreground"
+            className="text-base font-medium text-foreground"
           >
             ¿Qué podemos mejorar?
           </label>

@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CreditCard,
-  Lock,
+  IdCardIcon,
+    Lock,
   ArrowRight,
-  QrCode,
+  ScanQrCode,
   Loader2,
   UserCheck,
 } from "lucide-react";
@@ -148,7 +148,7 @@ export default function EntradaPage() {
                 No. Control
               </label>
               <div className="relative flex items-center">
-                <CreditCard className="pointer-events-none absolute left-3.5 size-5 text-muted-foreground/70" />
+                <IdCardIcon className="pointer-events-none absolute left-3.5 size-5 text-muted-foreground/70" />
                 <Input
                   id="no-control"
                   type="text"
@@ -207,34 +207,24 @@ export default function EntradaPage() {
               disabled={loading}
               className="flex h-13 w-full cursor-pointer items-center justify-center gap-2.5 rounded-2xl border border-border bg-muted/50 px-4 font-semibold text-foreground shadow-xs transition-all duration-200 hover:bg-muted active:scale-95 focus-visible:ring-4 focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60"
             >
-              <QrCode className="size-5 text-primary" />
+              <ScanQrCode className="size-5 text-primary" />
               <span className="text-base">Escanear QR</span>
             </button>
 
-            {/* Change student link */}
-            <div className="mt-1 text-center">
-              <button
-                type="button"
-                onClick={() => router.push("/registro")}
-                className="text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-              >
-                ¿No eres tú? Cambiar de alumno
-              </button>
-            </div>
           </div>
         </div>
       </div>
 
-      <footer className="px-6 pb-6 text-center">
-        <p
-          className={`text-sm font-medium ${
-            pendingCount > 0 ? "text-warning" : "text-muted-foreground"
-          }`}
-          aria-live="polite"
-        >
-          Registros pendientes: {pendingCount}
-        </p>
-      </footer>
+      {pendingCount > 0 && (
+        <footer className="flex items-center justify-center px-6 pb-6">
+          <p
+            className="text-sm font-medium text-warning"
+            aria-live="polite"
+          >
+            Registros pendientes: {pendingCount}
+          </p>
+        </footer>
+      )}
 
       {/* QR Scanner Camera Modal */}
       <QrScannerModal

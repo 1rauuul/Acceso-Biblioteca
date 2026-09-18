@@ -2,7 +2,6 @@
 
 import { useSyncExternalStore } from "react";
 import Image from "next/image";
-import { Badge } from "@/components/ui/badge";
 
 interface LibraryHeaderProps {
   subtitle?: string;
@@ -24,25 +23,23 @@ export function LibraryHeader({ subtitle }: LibraryHeaderProps) {
 
   return (
     <header className="relative flex flex-col items-center gap-2 px-4 pt-6 pb-2">
-      <Badge
-        variant="outline"
-        className={`absolute top-4 right-4 animate-pulse-slow gap-1.5 border-0 px-2.5 py-1 text-xs font-medium ${
-          isOnline
-            ? "bg-success/10 text-success"
-            : "bg-warning/10 text-warning"
-        }`}
+      <span
+        role="status"
         aria-live="polite"
+        title={isOnline ? "Conectado" : "Offline"}
+        className={`absolute top-4 right-4 size-2.5 rounded-full ${
+          isOnline ? "bg-success" : "bg-warning"
+        }`}
       >
-        <span aria-hidden="true">{isOnline ? "📡" : "🌐"}</span>
-        {isOnline ? "Conectado" : "Offline"}
-      </Badge>
+        <span className="sr-only">{isOnline ? "Conectado" : "Offline"}</span>
+      </span>
 
       <div
         className="flex size-16 items-center justify-center rounded-2xl bg-primary/10"
         aria-hidden="true"
       >
         <Image
-          src="/logo-itt.jpg"
+          src="/logo-itt.png"
           alt=""
           width={64}
           height={64}

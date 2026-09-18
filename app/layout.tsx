@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Geist } from "next/font/google";
 import { SerwistProvider } from "./serwist";
 import { SyncListener } from "@/components/sync-listener";
+import { InstallPrompt } from "@/components/install-prompt";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -30,9 +31,6 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: APP_NAME,
   },
-  icons: {
-    apple: "/icons/icon-192x192.png",
-  },
   formatDetection: { telephone: false },
 };
 
@@ -42,6 +40,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className={`${geistSans.variable} font-sans antialiased`}>
         <SerwistProvider swUrl="/serwist/sw.js">
           <SyncListener />
+          <InstallPrompt />
           {children}
         </SerwistProvider>
       </body>
